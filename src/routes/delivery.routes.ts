@@ -1,0 +1,65 @@
+import { Router } from "express";
+import {
+  assignDeliveryPartnerController,
+  acceptDeliveryOrderController,
+  createKitchenDeliveryItemController,
+  createDeliveryOrderController,
+  createDeliveryPartnerController,
+  getAvailableDeliveryPartnersController,
+  getAvailableDeliveryOrdersForPartnerController,
+  getDeliveryContactController,
+  getDeliveryItemsController,
+  getDeliveryOrderController,
+  getDeliveryPartnerOrdersController,
+  getKitchenDeliveryItemsController,
+  getKitchenDeliveryOrdersController,
+  getMyDeliveryOrdersController,
+  markDeliveryDoneController,
+  markDeliveryPickedUpController,
+  requestKitchenOtpController,
+  requestDeliveryPartnerOtpController,
+  startDeliveryOrderController,
+  updateDeliveryItemInventoryController,
+  updateKitchenDeliveryItemController,
+  updateDeliveryOrderStatusController,
+  updateDeliveryPartnerAvailabilityController,
+  updateDeliveryPartnerLocationController,
+  verifyKitchenOtpController,
+  verifyDeliveryPartnerOtpController
+} from "../controllers/delivery.controller";
+import { authMiddleware } from "../middleware/auth.middleware";
+
+const router = Router();
+
+router.get("/items", getDeliveryItemsController);
+router.get("/contact", getDeliveryContactController);
+
+router.post("/orders", authMiddleware, createDeliveryOrderController);
+router.get("/orders/available-for-partner", getAvailableDeliveryOrdersForPartnerController);
+router.get("/orders/my", authMiddleware, getMyDeliveryOrdersController);
+router.get("/orders/:id", authMiddleware, getDeliveryOrderController);
+router.patch("/orders/:id/status", authMiddleware, updateDeliveryOrderStatusController);
+router.patch("/orders/:id/assign-partner", authMiddleware, assignDeliveryPartnerController);
+router.patch("/orders/:id/accept", acceptDeliveryOrderController);
+router.patch("/orders/:id/picked-up", markDeliveryPickedUpController);
+router.patch("/orders/:id/start-delivery", startDeliveryOrderController);
+router.patch("/orders/:id/delivered", markDeliveryDoneController);
+
+router.post("/partners", authMiddleware, createDeliveryPartnerController);
+router.post("/partners/request-otp", requestDeliveryPartnerOtpController);
+router.post("/partners/verify-otp", verifyDeliveryPartnerOtpController);
+router.get("/partners/available", authMiddleware, getAvailableDeliveryPartnersController);
+router.get("/partners/:id/orders", getDeliveryPartnerOrdersController);
+router.patch("/partners/:id/availability", authMiddleware, updateDeliveryPartnerAvailabilityController);
+router.patch("/partners/:id/location", authMiddleware, updateDeliveryPartnerLocationController);
+
+router.get("/kitchen/orders", getKitchenDeliveryOrdersController);
+router.post("/kitchen/request-otp", requestKitchenOtpController);
+router.post("/kitchen/verify-otp", verifyKitchenOtpController);
+router.patch("/kitchen/orders/:id/status", updateDeliveryOrderStatusController);
+router.get("/kitchen/items", getKitchenDeliveryItemsController);
+router.post("/kitchen/items", createKitchenDeliveryItemController);
+router.put("/kitchen/items/:id", updateKitchenDeliveryItemController);
+router.patch("/kitchen/items/:id", updateDeliveryItemInventoryController);
+
+export default router;
