@@ -20,8 +20,8 @@ export const adminUploadMediaController = async (req: Request, res: Response) =>
     // ✅ IMPORTANT: send full data URI (not raw base64)
     formData.append("file", image);
 
-    formData.append("upload_preset", "hero");
-    formData.append("folder", "hero");
+    formData.append("upload_preset", "hero-images");
+    formData.append("folder", "hero-images");
 
     const response = await fetch(
       `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
