@@ -13,6 +13,7 @@ import {
   adminUpdateServiceController
 } from "../controllers/admin.controller";
 import { authMiddleware, requireRoles } from "../middleware/auth.middleware";
+import { adminDeleteImageController, adminUploadMediaController } from "../controllers/media.controller";
 
 const router = Router();
 
@@ -31,6 +32,5 @@ router.put("/services/:id", adminUpdateServiceController);
 router.delete("/services/:id", adminDeleteServiceController);
 router.post("/media/upload", adminUploadMediaController);
 router.delete("/media/:public_id", adminDeleteImageController);
-router.put("/media/reorder", adminReorderMediaController);
 
 export default router;
