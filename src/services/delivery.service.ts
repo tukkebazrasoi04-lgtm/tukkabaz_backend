@@ -525,6 +525,8 @@ class DeliveryService {
         imageUrl: input.imageUrl?.trim() || null,
         category: input.category,
         grocerySection: input.category === DeliveryCategory.GROCERY ? input.grocerySection?.trim() || "Daily Essentials" : null,
+        servingInfo: input.servingInfo?.trim() || null,
+        pieces: input.pieces?.trim() || null,
         availableQuantity: input.availableQuantity,
         isAvailable: input.isAvailable ?? input.availableQuantity > 0
       } as Prisma.DeliveryItemUncheckedCreateInput
@@ -543,6 +545,8 @@ class DeliveryService {
         imageUrl: input.imageUrl?.trim() || null,
         category: input.category,
         grocerySection: input.category === DeliveryCategory.GROCERY ? input.grocerySection?.trim() || "Daily Essentials" : null,
+        servingInfo: input.servingInfo?.trim() || null,
+        pieces: input.pieces?.trim() || null,
         availableQuantity: input.availableQuantity,
         isAvailable: input.isAvailable ?? input.availableQuantity > 0
       } as Prisma.DeliveryItemUncheckedUpdateInput

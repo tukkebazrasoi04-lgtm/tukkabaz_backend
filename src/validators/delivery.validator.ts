@@ -41,6 +41,8 @@ export const deliveryItemPayloadSchema = z.object({
   ),
   category: z.nativeEnum(DeliveryCategory),
   grocerySection: z.string().trim().min(2).max(80).nullable().optional(),
+  servingInfo: z.string().trim().min(1).max(80).nullable().optional(),
+  pieces: z.string().trim().min(1).max(80).nullable().optional(),
   availableQuantity: z.coerce.number().int().min(0),
   isAvailable: z.boolean().optional()
 });
