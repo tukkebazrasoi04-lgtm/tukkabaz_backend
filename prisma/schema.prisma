@@ -198,6 +198,7 @@ model DeliveryItem {
   imageUrl    String?
   category    DeliveryCategory
   grocerySection String?
+  servingInfo String?
   isAvailable Boolean          @default(true)
   availableQuantity Int        @default(100)
   createdAt   DateTime         @default(now())
