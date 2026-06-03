@@ -26,7 +26,6 @@ export const deliveryInventorySchema = z.object({
 
 export const deliveryItemPayloadSchema = z.object({
   name: z.string().trim().min(2).max(120),
-  description: z.string().trim().min(5).max(500),
   price: z.coerce.number().int().positive(),
   imageUrl: z.preprocess(
     (value) => {
@@ -53,8 +52,8 @@ export const deliveryStatusSchema = z.object({
 
 export const createDeliveryPartnerSchema = z.object({
   name: z.string().min(2).max(120),
-  phone: z.string().min(7).max(20),
-  vehicleType: z.string().min(2).max(80),
+  phone: z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
+  password: z.string().min(6),
   currentLat: z.coerce.number().optional(),
   currentLng: z.coerce.number().optional()
 });
@@ -96,6 +95,29 @@ export const partnerOrderActionSchema = z.object({
   partnerId: z.string().min(1)
 });
 
+export const dlUploadSchema = z.object({
+  dlUrl: z.string().url("dlUrl must be a valid URL").optional(),
+  imageBase64: z.string().optional(),
+  profilePhotoUrl: z.string().url("profilePhotoUrl must be a valid URL").optional()
+}).refine(data => data.dlUrl || data.imageBase64 || data.profilePhotoUrl, {
+  message: "Either dlUrl, imageBase64, or profilePhotoUrl is required"
+});
+
+export const partnerVerifySchema = z.object({
+  status: z.enum(["APPROVED", "REJECTED"])
+});
+
+export const loginDeliveryPartnerSchema = z.object({
+  phone: z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
+  password: z.string()
+});
+
+export const updatePushTokenSchema = z.object({
+  pushToken: z.string().min(1)
+});
+
 export type CreateDeliveryOrderInput = z.infer<typeof createDeliveryOrderSchema>;
 export type CreateDeliveryPartnerInput = z.infer<typeof createDeliveryPartnerSchema>;
 export type DeliveryItemPayloadInput = z.infer<typeof deliveryItemPayloadSchema>;
+export type DlUploadInput = z.infer<typeof dlUploadSchema>;
+export type PartnerVerifyInput = z.infer<typeof partnerVerifySchema>;

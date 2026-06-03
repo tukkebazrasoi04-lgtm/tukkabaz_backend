@@ -1,6 +1,7 @@
 import { BookingKind, PaymentStatus, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
+import { notifyAdminNewBooking } from "../utils/notify-admin";
 
 type CreateBookingIntentInput = {
   kind: BookingKind;
@@ -152,9 +153,22 @@ class BookingService {
       },
       include: {
         room: true,
-        service: true
+        service: true,
+        user: true
       }
     });
+
+    if (input.success) {
+      notifyAdminNewBooking({
+        userName: updated.user.name ?? 'Guest',
+        itemTitle: updated.kind === 'ROOM' && updated.room ? updated.room.title : updated.service ? updated.service.title : 'Unknown',
+        kind: updated.kind,
+        amount: updated.amount,
+        reference: updated.paymentReference,
+        checkIn: updated.checkInDate ? updated.checkInDate.toISOString().split('T')[0] : null,
+        checkOut: updated.checkOutDate ? updated.checkOutDate.toISOString().split('T')[0] : null
+      });
+    }
 
     return {
       message: input.success

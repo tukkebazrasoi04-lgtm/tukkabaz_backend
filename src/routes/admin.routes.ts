@@ -10,7 +10,9 @@ import {
   adminLoginController,
   adminUploadImageController,
   adminUpdateRoomController,
-  adminUpdateServiceController
+  adminUpdateServiceController,
+  adminGetPartnerPayoutsController,
+  adminClearPartnerPayoutController
 } from "../controllers/admin.controller";
 import { authMiddleware, requireRoles } from "../middleware/auth.middleware";
 import { adminDeleteImageController, adminUploadMediaController } from "../controllers/media.controller";
@@ -32,5 +34,8 @@ router.put("/services/:id", adminUpdateServiceController);
 router.delete("/services/:id", adminDeleteServiceController);
 router.post("/media/upload", adminUploadMediaController);
 router.delete("/media/:public_id", adminDeleteImageController);
+
+router.get("/partner-payouts", adminGetPartnerPayoutsController);
+router.post("/partner-payouts/:id/clear", adminClearPartnerPayoutController);
 
 export default router;

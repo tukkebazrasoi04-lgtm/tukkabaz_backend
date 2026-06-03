@@ -1,6 +1,7 @@
 import { type NextFunction, type Request, type Response } from "express";
 import { AppError } from "../middleware/error.middleware";
 import { deliveryService } from "../services/delivery.service";
+import { uploadService } from "../services/upload.service";
 import { sendSuccess } from "../utils/api-response";
 import {
   assignPartnerSchema,
@@ -17,7 +18,13 @@ import {
   partnerLocationSchema,
   partnerOtpRequestSchema,
   partnerOtpVerifySchema,
+  dlUploadSchema,
+  partnerVerifySchema,
+  loginDeliveryPartnerSchema,
+  updatePushTokenSchema,
 } from "../validators/delivery.validator";
+import bcrypt from "bcrypt";
+import { prisma } from "../lib/prisma";
 
 export const getDeliveryItemsController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -117,8 +124,60 @@ export const createDeliveryPartnerController = async (req: Request, res: Respons
       throw new AppError(400, "Invalid delivery partner body", parsed.error.flatten());
     }
 
-    const response = await deliveryService.createPartner(parsed.data);
-    sendSuccess(res, response, 201);
+    const { name, phone, password, currentLat, currentLng } = parsed.data;
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    try {
+      const partner = await prisma.deliveryPartner.create({
+        data: {
+          name: name.trim(),
+          phone: phone.trim(),
+          password: hashedPassword,
+          vehicleType: "Bike / Scooty",
+          currentLat,
+          currentLng
+        }
+      });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password: _, ...partnerWithoutPassword } = partner;
+      sendSuccess(res, { message: "Delivery partner created", partner: partnerWithoutPassword }, 201);
+    } catch (dbError: any) {
+      if (dbError.code === 'P2002' && dbError.meta?.target?.includes('phone')) {
+        throw new AppError(409, "Phone number is already registered");
+      }
+      throw dbError;
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const loginDeliveryPartnerController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const parsed = loginDeliveryPartnerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid login body", parsed.error.flatten());
+    }
+
+    const { phone, password } = parsed.data;
+
+    const partner = await prisma.deliveryPartner.findUnique({
+      where: { phone: phone.trim() }
+    });
+
+    if (!partner || !partner.password) {
+      throw new AppError(401, "Invalid phone or password");
+    }
+
+    const isMatch = await bcrypt.compare(password, partner.password);
+    if (!isMatch) {
+      throw new AppError(401, "Invalid phone or password");
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _, ...partnerWithoutPassword } = partner;
+    sendSuccess(res, { message: "Login successful", partner: partnerWithoutPassword });
   } catch (error) {
     next(error);
   }
@@ -182,8 +241,14 @@ export const verifyKitchenOtpController = async (req: Request, res: Response, ne
 
 export const getAvailableDeliveryPartnersController = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const response = await deliveryService.getAvailablePartners();
-    sendSuccess(res, response);
+    const partners = await prisma.deliveryPartner.findMany({
+      where: {
+        isAvailable: true,
+        profileStatus: 'APPROVED'
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    sendSuccess(res, { partners });
   } catch (error) {
     next(error);
   }
@@ -415,6 +480,170 @@ export const updateKitchenDeliveryItemController = async (req: Request, res: Res
 
     const response = await deliveryService.updateKitchenItem(itemId, parsed.data);
     sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── DL Verification Controllers ──────────────────────────────────────────────
+
+/** PATCH /delivery/partners/:id/dl
+ *  Partner submits their DL image URL. Status moves to PENDING. */
+export const uploadPartnerDlController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const partnerId = req.params.id;
+    if (!partnerId) {
+      throw new AppError(400, "Partner id is required");
+    }
+
+    const parsed = dlUploadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid DL upload body", parsed.error.flatten());
+    }
+
+    let finalDlUrl = parsed.data.dlUrl;
+
+    if (parsed.data.imageBase64) {
+      const uploadRes = await uploadService.uploadImage({
+        imageBase64: parsed.data.imageBase64,
+        folder: "tukkabaz/partner_dl"
+      });
+      finalDlUrl = uploadRes.url;
+    }
+
+    const dataToUpdate: any = {};
+    if (finalDlUrl) {
+      dataToUpdate.dlUrl = finalDlUrl;
+      dataToUpdate.profileStatus = "PENDING";
+    }
+    if (parsed.data.profilePhotoUrl) {
+      dataToUpdate.profilePhotoUrl = parsed.data.profilePhotoUrl;
+    }
+
+    if (Object.keys(dataToUpdate).length === 0) {
+      throw new AppError(400, "No valid data provided to update.");
+    }
+
+    const partner = await prisma.deliveryPartner.update({
+      where: { id: partnerId },
+      data: dataToUpdate
+    });
+
+    sendSuccess(res, { message: "Partner profile updated successfully.", partner });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** GET /delivery/admin/partners/pending
+ *  Admin: list all partners awaiting DL verification. */
+export const getPendingPartnersController = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const response = await deliveryService.getPendingPartners();
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** GET /delivery/admin/partners
+ *  Admin: fetch all partners. */
+export const getAllPartnersController = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const response = await deliveryService.getAllPartners();
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** PATCH /delivery/admin/partners/:id/verify
+ *  Admin: approve or reject a partner's DL. */
+export const verifyPartnerController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const partnerId = req.params.id;
+    if (!partnerId) {
+      throw new AppError(400, "Partner id is required");
+    }
+
+    const parsed = partnerVerifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid verify body — status must be APPROVED or REJECTED", parsed.error.flatten());
+    }
+
+    const response = await deliveryService.verifyPartner(partnerId, parsed.data.status);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── Payout & Earnings Controllers ────────────────────────────────────────────
+
+export const getPartnerEarningsController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const partnerId = req.params.id;
+    if (!partnerId) {
+      throw new AppError(400, "Partner id is required");
+    }
+
+    const response = await deliveryService.getPartnerEarnings(partnerId);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updatePartnerUpiController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const partnerId = req.params.id;
+    if (!partnerId) {
+      throw new AppError(400, "Partner id is required");
+    }
+    const upiId = req.body.upiId;
+    if (!upiId || typeof upiId !== "string") {
+      throw new AppError(400, "Valid upiId is required");
+    }
+
+    const response = await deliveryService.updatePartnerUpi(partnerId, upiId);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const requestPartnerPayoutController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const partnerId = req.params.id;
+    if (!partnerId) {
+      throw new AppError(400, "Partner id is required");
+    }
+
+    const response = await deliveryService.requestPartnerPayout(partnerId);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updatePartnerPushTokenController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const partnerId = req.params.id;
+    if (!partnerId) {
+      throw new AppError(400, "Partner id is required");
+    }
+
+    const parsed = updatePushTokenSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid push token body", parsed.error.flatten());
+    }
+
+    const partner = await prisma.deliveryPartner.update({
+      where: { id: partnerId },
+      data: { pushToken: parsed.data.pushToken }
+    });
+
+    sendSuccess(res, { message: "Push token updated", partner });
   } catch (error) {
     next(error);
   }

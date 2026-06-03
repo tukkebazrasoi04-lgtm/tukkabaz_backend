@@ -22,7 +22,7 @@ app.use("/bookings", bookingRoutes);
 app.use("/delivery", deliveryRoutes);
 app.use("/api/delivery", deliveryRoutes);
 app.use("/admin", adminRoutes);
-
+app.use("/api/admin", adminRoutes);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

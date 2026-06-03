@@ -1,4 +1,0 @@
-ALTER TABLE "Room" ADD COLUMN "amenities" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
-ALTER TABLE "Room" ADD COLUMN "unavailableAmenities" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
-ALTER TABLE "Room" ADD COLUMN "sleepTitle" TEXT;
-ALTER TABLE "Room" ADD COLUMN "sleepDescription" TEXT;

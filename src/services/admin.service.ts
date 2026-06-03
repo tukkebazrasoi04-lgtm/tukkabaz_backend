@@ -1,4 +1,4 @@
-import { BookingKind, PaymentStatus, ServiceType, type Prisma } from "@prisma/client";
+import { BookingKind, PaymentStatus, ServiceType, DeliveryOrderStatus, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
 
@@ -351,7 +351,7 @@ class AdminService {
   }
 
   async getAnalytics() {
-    const [totalBookings, successfulBookings, roomSuccessCount, serviceSuccessCount, revenue] =
+    const [totalBookings, successfulBookings, roomSuccessCount, serviceSuccessCount, revenue, totalDeliveryOrders, successfulDeliveryOrders, deliveryRevenue] =
       await Promise.all([
         prisma.booking.count(),
         prisma.booking.count({
@@ -366,6 +366,14 @@ class AdminService {
         prisma.booking.aggregate({
           where: { paymentStatus: PaymentStatus.SUCCESS },
           _sum: { amount: true }
+        }),
+        prisma.deliveryOrder.count(),
+        prisma.deliveryOrder.count({
+          where: { paymentStatus: PaymentStatus.SUCCESS }
+        }),
+        prisma.deliveryOrder.aggregate({
+          where: { paymentStatus: PaymentStatus.SUCCESS },
+          _sum: { totalAmount: true }
         })
       ]);
 
@@ -399,7 +407,7 @@ class AdminService {
       .map((s) => s.serviceId)
       .filter((id): id is string => Boolean(id));
 
-    const [rooms, services, recentBookings] = await Promise.all([
+    const [rooms, services, recentBookings, recentDeliveryOrders] = await Promise.all([
       roomIds.length
         ? prisma.room.findMany({
             where: { id: { in: roomIds } }
@@ -421,6 +429,21 @@ class AdminService {
           },
           room: true,
           service: true
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: 30
+      }),
+      prisma.deliveryOrder.findMany({
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true
+            }
+          }
         },
         orderBy: {
           createdAt: "desc"
@@ -453,18 +476,92 @@ class AdminService {
       };
     });
 
+    const mappedDeliveryOrders = recentDeliveryOrders.map((d) => ({
+      id: d.id,
+      userId: d.userId,
+      kind: "DELIVERY" as any,
+      amount: d.totalAmount,
+      paymentProvider: d.paymentProvider,
+      paymentReference: d.paymentReference,
+      paymentStatus: d.paymentStatus,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+      user: d.user,
+      items: d.items
+    }));
+
+    const combinedBookings = [...recentBookings, ...mappedDeliveryOrders]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 30);
+
     return {
       summary: {
-        totalBookings,
-        successfulBookings,
+        totalBookings: totalBookings + totalDeliveryOrders,
+        successfulBookings: successfulBookings + successfulDeliveryOrders,
         roomsPurchased: roomSuccessCount,
         servicesPurchased: serviceSuccessCount,
-        totalRevenue: revenue._sum.amount ?? 0
+        deliveryOrders: successfulDeliveryOrders,
+        totalRevenue: (revenue._sum.amount ?? 0) + (deliveryRevenue._sum.totalAmount ?? 0)
       },
       roomBreakdown,
       serviceBreakdown,
-      recentBookings
+      recentBookings: combinedBookings
     };
+  }
+  async getPartnerPayouts() {
+    const partners = await prisma.deliveryPartner.findMany({
+      where: { payoutRequestedAt: { not: null } },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        upiId: true,
+        payoutRequestedAt: true,
+        orders: {
+          where: {
+            status: DeliveryOrderStatus.DELIVERED,
+            isPayoutCleared: false
+          },
+          select: { partnerCut: true }
+        }
+      }
+    });
+
+    return {
+      payouts: partners.map(p => ({
+        id: p.id,
+        name: p.name,
+        phone: p.phone,
+        upiId: p.upiId,
+        payoutRequestedAt: p.payoutRequestedAt,
+        amount: p.orders.reduce((sum, o) => sum + o.partnerCut, 0)
+      }))
+    };
+  }
+
+  async clearPartnerPayout(partnerId: string, utrNumber: string) {
+    const result = await prisma.$transaction(async (tx) => {
+      const orders = await tx.deliveryOrder.updateMany({
+        where: {
+          partnerId,
+          status: DeliveryOrderStatus.DELIVERED,
+          isPayoutCleared: false
+        },
+        data: {
+          isPayoutCleared: true,
+          payoutReference: utrNumber
+        }
+      });
+
+      const partner = await tx.deliveryPartner.update({
+        where: { id: partnerId },
+        data: { payoutRequestedAt: null }
+      });
+
+      return { ordersUpdated: orders.count, partner };
+    });
+
+    return { message: "Payout cleared successfully", ...result };
   }
 }
 

@@ -4,6 +4,9 @@ import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
 import type { CreateDeliveryOrderInput, CreateDeliveryPartnerInput, DeliveryItemPayloadInput } from "../validators/delivery.validator";
 import { normalizePhone } from "./otp.service";
+import { notifyAdminPartnerApplication, notifyAdminNewDeliveryOrder } from "../utils/notify-admin";
+import { sendPushNotifications } from "../utils/expo-push";
+
 
 const partnerAvailableStatuses = new Set<DeliveryOrderStatus>([
   DeliveryOrderStatus.DELIVERED,
@@ -189,6 +192,15 @@ class DeliveryService {
       });
     });
 
+    notifyAdminNewDeliveryOrder({
+      orderNumber: order.orderNumber,
+      customerName: user.name ?? 'Guest',
+      customerPhone: user.phone ?? customerPhone,
+      itemSummary: `${input.items.length} items`,
+      totalAmount: totalAmount,
+      address: input.deliveryAddress
+    });
+
     return { message: "Delivery order placed", order: this.serializeOrder(order, "user") };
   }
 
@@ -232,29 +244,30 @@ class DeliveryService {
       });
     }
 
+    if (status === DeliveryOrderStatus.READY_FOR_PICKUP) {
+      const availablePartners = await prisma.deliveryPartner.findMany({
+        where: {
+          isAvailable: true,
+          profileStatus: 'APPROVED',
+          pushToken: { not: null }
+        },
+        select: { pushToken: true }
+      });
+      const tokens = availablePartners.map(p => p.pushToken as string).filter(t => t);
+      if (tokens.length > 0) {
+        await sendPushNotifications(
+          tokens,
+          "New Delivery Order Available",
+          `Order ${order.orderNumber} is ready for pickup!`,
+          { orderId: order.id }
+        ).catch(e => console.error("Failed to send push notification", e));
+      }
+    }
+
     return { message: "Delivery order status updated", order: this.serializeOrder(order, role === "ADMIN" ? "admin" : "kitchen") };
   }
 
-  async createPartner(input: CreateDeliveryPartnerInput) {
-    const partner = await prisma.deliveryPartner.upsert({
-      where: { phone: input.phone.trim() },
-      update: {
-        name: input.name.trim(),
-        vehicleType: input.vehicleType.trim(),
-        currentLat: input.currentLat,
-        currentLng: input.currentLng
-      },
-      create: {
-        name: input.name.trim(),
-        phone: input.phone.trim(),
-        vehicleType: input.vehicleType.trim(),
-        currentLat: input.currentLat,
-        currentLng: input.currentLng
-      }
-    });
 
-    return { message: "Delivery partner created", partner };
-  }
 
   async requestPartnerOtp(input: { name?: string; phone: string; vehicleType?: string }) {
     const phone = normalizePhone(input.phone);
@@ -389,6 +402,16 @@ class DeliveryService {
       throw new AppError(404, "Delivery partner not found.");
     }
 
+    // DL verification guard — only APPROVED partners may accept deliveries
+    if (partner.profileStatus !== "APPROVED") {
+      const messages: Record<string, string> = {
+        INCOMPLETE: "Your profile is incomplete. Please upload your Driver's License to get verified.",
+        PENDING: "Your Driver's License is under review. You can accept deliveries once approved.",
+        REJECTED: "Your verification was rejected. Please re-upload your Driver's License."
+      };
+      throw new AppError(403, messages[partner.profileStatus] ?? "Your account is not verified.");
+    }
+
     const existingOrder = await prisma.deliveryOrder.findUnique({ where: { id: orderId } });
     if (!existingOrder) {
       throw new AppError(404, "Delivery order not found.");
@@ -520,7 +543,6 @@ class DeliveryService {
     const item = await prisma.deliveryItem.create({
       data: {
         name: input.name.trim(),
-        description: input.description.trim(),
         price: input.price,
         imageUrl: input.imageUrl?.trim() || null,
         category: input.category,
@@ -540,7 +562,6 @@ class DeliveryService {
       where: { id: itemId },
       data: {
         name: input.name.trim(),
-        description: input.description.trim(),
         price: input.price,
         imageUrl: input.imageUrl?.trim() || null,
         category: input.category,
@@ -565,6 +586,119 @@ class DeliveryService {
     });
 
     return { message: "Delivery partner location updated", partner };
+  }
+
+  // ─── DL Verification ─────────────────────────────────────────────────────
+
+  /** Partner uploads their DL image URL → status moves to PENDING */
+  async uploadPartnerDl(partnerId: string, dlUrl: string) {
+    const partner = await prisma.deliveryPartner.findUnique({ where: { id: partnerId } });
+    if (!partner) {
+      throw new AppError(404, "Delivery partner not found.");
+    }
+
+    const updated = await prisma.deliveryPartner.update({
+      where: { id: partnerId },
+      data: {
+        dlUrl,
+        profileStatus: "PENDING"
+      }
+    });
+
+    notifyAdminPartnerApplication({
+      partnerName: updated.name ?? 'Unknown',
+      phone: updated.phone,
+      vehicleType: updated.vehicleType
+    });
+
+    return { message: "Driver's License submitted for review.", partner: updated };
+  }
+
+  /** Admin: fetch all partners awaiting verification */
+  async getPendingPartners() {
+    const partners = await prisma.deliveryPartner.findMany({
+      where: { profileStatus: "PENDING" },
+      orderBy: { updatedAt: "desc" }
+    });
+    return { partners };
+  }
+
+  /** Admin: fetch all partners */
+  async getAllPartners() {
+    const partners = await prisma.deliveryPartner.findMany({
+      orderBy: { updatedAt: "desc" }
+    });
+    return { partners };
+  }
+
+  /** Admin: approve or reject a partner */
+  async verifyPartner(partnerId: string, decision: "APPROVED" | "REJECTED") {
+    const partner = await prisma.deliveryPartner.findUnique({ where: { id: partnerId } });
+    if (!partner) {
+      throw new AppError(404, "Delivery partner not found.");
+    }
+    if (partner.profileStatus !== "PENDING") {
+      throw new AppError(400, "Partner is not in PENDING state.");
+    }
+
+    const newStatus = decision === "APPROVED" ? "APPROVED" : "REJECTED";
+    const updated = await prisma.deliveryPartner.update({
+      where: { id: partnerId },
+      data: { profileStatus: newStatus }
+    });
+
+    return {
+      message: decision === "APPROVED" ? "Partner approved." : "Partner rejected — they must re-upload their DL.",
+      partner: updated
+    };
+  }
+
+  // ─── Payout & Earnings ───────────────────────────────────────────────────
+
+  async getPartnerEarnings(partnerId: string) {
+    const orders = await prisma.deliveryOrder.findMany({
+      where: {
+        partnerId,
+        status: DeliveryOrderStatus.DELIVERED
+      },
+      select: {
+        partnerCut: true,
+        isPayoutCleared: true
+      }
+    });
+
+    const unpaid = orders
+      .filter((o) => !o.isPayoutCleared)
+      .reduce((sum, o) => sum + o.partnerCut, 0);
+
+    const lifetime = orders.reduce((sum, o) => sum + o.partnerCut, 0);
+
+    const partner = await prisma.deliveryPartner.findUnique({
+      where: { id: partnerId },
+      select: { upiId: true, payoutRequestedAt: true }
+    });
+
+    if (!partner) {
+      throw new AppError(404, "Partner not found");
+    }
+
+    return { unpaid, lifetime, upiId: partner.upiId, payoutRequestedAt: partner.payoutRequestedAt };
+  }
+
+  async updatePartnerUpi(partnerId: string, upiId: string) {
+    const partner = await prisma.deliveryPartner.update({
+      where: { id: partnerId },
+      data: { upiId }
+    });
+    return { message: "UPI ID updated", partner };
+  }
+
+  async requestPartnerPayout(partnerId: string) {
+    const partner = await prisma.deliveryPartner.update({
+      where: { id: partnerId },
+      data: { payoutRequestedAt: new Date() }
+    });
+    return { message: "Payout requested", partner };
   }
 }
 

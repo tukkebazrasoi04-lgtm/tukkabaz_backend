@@ -210,3 +210,39 @@ export const adminUploadImageController = async (
     next(error);
   }
 };
+
+export const adminGetPartnerPayoutsController = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const response = await adminService.getPartnerPayouts();
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminClearPartnerPayoutController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const partnerId = req.params.id;
+    if (!partnerId) {
+      throw new AppError(400, "Partner id is required");
+    }
+
+    const { utrNumber } = req.body;
+    if (!utrNumber || typeof utrNumber !== "string") {
+      throw new AppError(400, "Valid utrNumber is required");
+    }
+
+    const response = await adminService.clearPartnerPayout(partnerId, utrNumber);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};

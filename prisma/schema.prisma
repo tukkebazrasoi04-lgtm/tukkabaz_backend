@@ -8,53 +8,43 @@ datasource db {
 }
 
 model User {
-  id          String    @id @default(cuid())
-  firebaseUid String    @unique
-  email       String    @unique
-  name        String
-  phone       String?   @unique
+  id              String          @id @default(cuid())
+  firebaseUid     String          @unique
+  email           String          @unique
+  name            String
+  picture         String?
+  role            Role            @default(CUSTOMER)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  passwordHash    String?
+  phone           String?         @unique
   phoneVerifiedAt DateTime?
   deliveryAddress String?
-  picture     String?
-  passwordHash String?
-  role        Role      @default(CUSTOMER)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  sessions    Session[]
-  bookings    Booking[]
-  roomReviews RoomReview[]
-  deliveryOrders DeliveryOrder[]
+  bookings        Booking[]
+  deliveryOrders  DeliveryOrder[]
+  roomReviews     RoomReview[]
+  sessions        Session[]
 }
 
 model OtpVerification {
-  id          String     @id @default(cuid())
-  identifier  String
-  phone       String?
-  userId      String?
-  orderId     String?
-  purpose     OtpPurpose
-  otpHash     String
-  attempts    Int        @default(0)
-  expiresAt   DateTime
-  consumedAt  DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id         String     @id @default(cuid())
+  identifier String
+  purpose    OtpPurpose
+  otpHash    String
+  attempts   Int        @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  phone      String?
+  userId     String?
+  orderId    String?
 
   @@index([identifier, purpose, consumedAt])
   @@index([phone, purpose])
   @@index([userId, purpose])
   @@index([orderId, purpose])
   @@index([expiresAt])
-}
-
-enum OtpPurpose {
-  USER_PHONE_LOGIN
-  USER_PHONE_VERIFY
-  PASSWORD_RESET
-  DELIVERY_PARTNER_LOGIN
-  KITCHEN_LOGIN
-  ORDER_PICKUP
-  ORDER_DELIVERY
 }
 
 model Session {
@@ -73,59 +63,52 @@ model Session {
   @@index([expiresAt])
 }
 
-enum Role {
-  CUSTOMER
-  VENDOR
-  DELIVERY
-  ADMIN
-}
-
 model Room {
-  id          String    @id @default(cuid())
-  title       String
-  description String
-  price       Int
-  imageUrl    String?
-  imageUrls   String[]  @default([])
-  roomPhotoTypes String[] @default([])
-  roomPhotos  Json      @default("[]")
-  address     String?
-  ownerPhone  String?
-  tags        String[]  @default([])
-  amenities   String[]  @default([])
-  unavailableAmenities String[] @default([])
-  sleepTitle  String?
-  sleepDescription String?
-  latitude    Float?    @db.DoublePrecision
-  longitude   Float?    @db.DoublePrecision
-  capacity    Int       @default(2)
-  available   Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  bookings    Booking[]
-  reviews     RoomReview[]
+  id                   String       @id @default(cuid())
+  title                String
+  description          String
+  price                Int
+  imageUrl             String?
+  capacity             Int          @default(2)
+  available            Boolean      @default(true)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  address              String?
+  latitude             Float?
+  longitude            Float?
+  ownerPhone           String?
+  tags                 String[]     @default([])
+  imageUrls            String[]     @default([])
+  amenities            String[]     @default([])
+  unavailableAmenities String[]     @default([])
+  sleepTitle           String?
+  sleepDescription     String?
+  roomPhotoTypes       String[]     @default([])
+  roomPhotos           Json         @default("[]")
+  bookings             Booking[]
+  reviews              RoomReview[]
 }
 
 model Service {
-  id          String      @id @default(cuid())
-  title       String
-  description String
-  price       Int
-  imageUrl    String?
-  imageUrls   String[]    @default([])
-  type        ServiceType
-  detailSections Json      @default("[]")
-  activityOptions Json     @default("[]")
-  requiredDocuments String[] @default([])
-  pickupAddress String?
-  contactPhone String?
-  latitude    Float?      @db.DoublePrecision
-  longitude   Float?      @db.DoublePrecision
-  ctaLabel    String?
-  available   Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  bookings    Booking[]
+  id                String      @id @default(cuid())
+  title             String
+  description       String
+  price             Int
+  imageUrl          String?
+  type              ServiceType
+  available         Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  imageUrls         String[]    @default([])
+  detailSections    Json        @default("[]")
+  requiredDocuments String[]    @default([])
+  pickupAddress     String?
+  contactPhone      String?
+  latitude          Float?
+  longitude         Float?
+  ctaLabel          String?
+  activityOptions   Json        @default("[]")
+  bookings          Booking[]
 }
 
 model Booking {
@@ -139,15 +122,15 @@ model Booking {
   paymentProvider  String        @default("SIMULATED")
   paymentReference String?
   paymentStatus    PaymentStatus @default(PENDING)
-  activityOptions  Json          @default("[]")
   bookedFor        DateTime?
-  checkInDate      DateTime?
-  checkOutDate     DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+  checkInDate      DateTime?
+  checkOutDate     DateTime?
+  activityOptions  Json          @default("[]")
+  room             Room?         @relation(fields: [roomId], references: [id])
+  service          Service?      @relation(fields: [serviceId], references: [id])
   user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  room             Room?         @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  service          Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([roomId])
@@ -171,6 +154,97 @@ model RoomReview {
   @@index([userId, createdAt])
 }
 
+model DeliveryItem {
+  id                String           @id @default(cuid())
+  name              String
+  price             Int
+  imageUrl          String?
+  category          DeliveryCategory
+  isAvailable       Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  availableQuantity Int              @default(100)
+  grocerySection    String?
+  servingInfo       String?
+  pieces            String?
+
+  @@index([category, isAvailable])
+}
+
+model DeliveryOrder {
+  id               String              @id @default(cuid())
+  userId           String
+  items            Json
+  totalAmount      Int
+  status           DeliveryOrderStatus @default(PENDING)
+  deliveryAddress  String
+  customerPhone    String
+  partnerId        String?
+  destinationLat   Float?
+  destinationLng   Float?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  pickupOtp        String?
+  deliveryOtp      String?
+  orderNumber      String              @unique
+  paymentProvider  String              @default("SIMULATED")
+  paymentReference String?
+  paymentStatus    PaymentStatus       @default(PENDING)
+  isPayoutCleared  Boolean             @default(false)
+  partnerCut       Int                 @default(50)
+  payoutReference  String?
+  partner          DeliveryPartner?    @relation(fields: [partnerId], references: [id])
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([partnerId])
+  @@index([paymentStatus])
+  @@index([status])
+  @@index([orderNumber])
+}
+
+model DeliveryPartner {
+  id                String               @id @default(cuid())
+  name              String
+  phone             String               @unique
+  vehicleType       String
+  isAvailable       Boolean              @default(true)
+  currentOrderId    String?
+  currentLat        Float?
+  currentLng        Float?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  dlUrl             String?
+  profileStatus     PartnerProfileStatus @default(INCOMPLETE)
+  payoutRequestedAt DateTime?
+  upiId             String?
+  password          String?
+  profilePhotoUrl   String?
+  pushToken         String?
+  orders            DeliveryOrder[]
+
+  @@index([isAvailable])
+  @@index([currentOrderId])
+  @@index([profileStatus])
+}
+
+enum OtpPurpose {
+  USER_PHONE_LOGIN
+  USER_PHONE_VERIFY
+  DELIVERY_PARTNER_LOGIN
+  KITCHEN_LOGIN
+  ORDER_PICKUP
+  ORDER_DELIVERY
+  PASSWORD_RESET
+}
+
+enum Role {
+  CUSTOMER
+  VENDOR
+  DELIVERY
+  ADMIN
+}
+
 enum ServiceType {
   RENT_SCOOTY
   TRIP
@@ -190,71 +264,11 @@ enum PaymentStatus {
   FAILED
 }
 
-model DeliveryItem {
-  id          String           @id @default(cuid())
-  name        String
-  description String
-  price       Int
-  imageUrl    String?
-  category    DeliveryCategory
-  grocerySection String?
-  servingInfo String?
-  pieces      String?
-  isAvailable Boolean          @default(true)
-  availableQuantity Int        @default(100)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-
-  @@index([category, isAvailable])
-}
-
-model DeliveryOrder {
-  id              String              @id @default(cuid())
-  orderNumber     String              @unique
-  userId          String
-  items           Json
-  totalAmount     Int
-  paymentProvider String              @default("SIMULATED")
-  paymentReference String?
-  paymentStatus   PaymentStatus       @default(PENDING)
-  status          DeliveryOrderStatus @default(PENDING)
-  deliveryAddress String
-  customerPhone   String
-  partnerId       String?
-  destinationLat  Float?              @db.DoublePrecision
-  destinationLng  Float?              @db.DoublePrecision
-  pickupOtp       String?
-  deliveryOtp     String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partner         DeliveryPartner?    @relation(fields: [partnerId], references: [id], onDelete: SetNull)
-
-  @@index([userId, createdAt])
-  @@index([partnerId])
-  @@index([paymentStatus])
-  @@index([status])
-  @@index([orderNumber])
-}
-
-model DeliveryPartner {
-  id             String          @id @default(cuid())
-  name           String
-  phone          String
-  vehicleType    String
-  isAvailable    Boolean         @default(true)
-  currentOrderId String?
-  currentLat     Float?          @db.DoublePrecision
-  currentLng     Float?          @db.DoublePrecision
-  loginOtp        String?
-  loginOtpExpiresAt DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  orders         DeliveryOrder[]
-
-  @@index([isAvailable])
-  @@index([currentOrderId])
-  @@unique([phone])
+enum PartnerProfileStatus {
+  INCOMPLETE
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum DeliveryCategory {
