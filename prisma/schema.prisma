@@ -252,6 +252,7 @@ enum ServiceType {
   CAMPING
   TREKKING_WITH_CAMPING
   CAB_AND_TAXI
+  CAFE
 }
 
 enum BookingKind {

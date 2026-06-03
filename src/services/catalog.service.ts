@@ -289,6 +289,29 @@ const defaultServices = [
     latitude: 29.4765,
     longitude: 79.6471,
     ctaLabel: "Book Trek Now"
+  },
+  {
+    title: "Tukkebaz Cafe & Restaurant",
+    description: "Enjoy fresh local dishes, coffee, and stunning views of the Satkhol valley.",
+    price: 350,
+    imageUrl: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&q=80",
+    imageUrls: [
+      "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&q=80"
+    ],
+    type: ServiceType.CAFE,
+    detailSections: [
+      {
+        title: "Highlights",
+        items: [
+          "Fresh organic coffee and hot beverages.",
+          "Authentic Kumaoni cuisine and quick snacks.",
+          "Cozy wooden seating with beautiful valley views."
+        ]
+      }
+    ],
+    activityOptions: [],
+    contactPhone: "+919876543210",
+    ctaLabel: "View Menu"
   }
 ];
 
