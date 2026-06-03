@@ -126,48 +126,39 @@ const defaultServices = [
     ctaLabel: "Contact now"
   },
   {
-    title: "Local Trip Package",
-    description: "Half-day guided sightseeing trip around Mukteshwar.",
-    price: 1800,
+    title: "Cab and Taxi Service",
+    description: "Book or call a cab or taxi for local sightseeing, outstation, or station pickups.",
+    price: 3500,
     imageUrl:
-      "https://images.unsplash.com/photo-1530789253388-582c481c54b0?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1200&q=80",
     imageUrls: [
-      "https://images.unsplash.com/photo-1530789253388-582c481c54b0?auto=format&fit=crop&w=1200&q=80",
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
-      "https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=1200&q=80",
-      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80"
+      "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1200&q=80"
     ],
-    type: ServiceType.TRIP,
+    type: ServiceType.CAB_AND_TAXI,
     detailSections: [
       {
-        title: "What you will do",
+        title: "Booking procedure",
         items: [
-          "Meet your local host and confirm the route.",
-          "Visit viewpoints, cafes, and village spots around Mukteshwar.",
-          "Return with support from the Tukkebaz team."
+          "Choose your destination and confirm fare with driver.",
+          "Cabs are available for local sightseeing and outstation drops.",
+          "Clean vehicles with professional local drivers."
         ]
       },
       {
-        title: "Things to know",
-        body: "Price includes one guided booking slot. Availability and final route are confirmed after booking."
+        title: "Important info",
+        body: "Tolls, parking fees, and driver allowance are included or charged as extra depending on route."
       }
     ],
     activityOptions: [
       {
-        id: "local-guide",
-        title: "Local guide",
-        description: "Add a local guide for route help and stories.",
-        pricePerGuest: 350
-      },
-      {
-        id: "meal-stop",
-        title: "Meal stop coordination",
-        description: "Add cafe or lunch stop coordination during the trip.",
-        pricePerGuest: 250
+        id: "half-day-ext",
+        title: "Extend to Full Day",
+        description: "Upgrade from half-day (4 hrs) to full-day cab (8 hrs).",
+        pricePerGuest: 1500
       }
     ],
     contactPhone: "+919876543210",
-    ctaLabel: "Book now"
+    ctaLabel: "Call Cab Driver"
   },
   {
     title: "Camping Experience",
@@ -214,7 +205,7 @@ const defaultServices = [
     ctaLabel: "Book now"
   },
   {
-    title: "Drone Shooting",
+    title: "Drone Shoot",
     description: "Professional drone shoot for your trip memories.",
     price: 2200,
     imageUrl:
@@ -225,7 +216,7 @@ const defaultServices = [
       "https://images.unsplash.com/photo-1473968512647-3e447244af8f?auto=format&fit=crop&w=1200&q=80",
       "https://images.unsplash.com/photo-1488085061387-422e29b40080?auto=format&fit=crop&w=1200&q=80"
     ],
-    type: ServiceType.DRONE_SHOOTING,
+    type: ServiceType.DRONE_SHOOT,
     detailSections: [
       {
         title: "What you will do",
@@ -256,6 +247,48 @@ const defaultServices = [
     ],
     contactPhone: "+919876543210",
     ctaLabel: "Book now"
+  },
+  {
+    title: "Trekking & Camping Package",
+    description: "Guided valley trek with overnight camp stay, meals, and bonfire.",
+    price: 3800,
+    imageUrl:
+      "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=1200&q=80",
+    imageUrls: [
+      "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1533240332313-0db49b439ad3?auto=format&fit=crop&w=1200&q=80"
+    ],
+    type: ServiceType.TREKKING_WITH_CAMPING,
+    detailSections: [
+      {
+        title: "Itinerary",
+        items: [
+          "Day 1: Start 3-hour guided valley trek at 10 AM.",
+          "Day 1: Reach mountain camp, check-in, sunset snacks & bonfire dinner.",
+          "Day 2: Morning valley views, breakfast, and return trek."
+        ]
+      },
+      {
+        title: "What's included",
+        body: "Professional guide, sleeping bags, dome tents, evening bonfire, dinner, and breakfast."
+      }
+    ],
+    activityOptions: [
+      {
+        id: "sleeping-bag-up",
+        title: "Premium Thermal Sleeping Bag",
+        description: "Upgrade to extreme cold weather sleeping bags.",
+        pricePerGuest: 200
+      }
+    ],
+    requiredDocuments: [
+      "Aadhaar card or government ID"
+    ],
+    pickupAddress: "Adventure Hub satkhol, Mukteshwar, Uttarakhand",
+    contactPhone: "+919876543210",
+    latitude: 29.4765,
+    longitude: 79.6471,
+    ctaLabel: "Book Trek Now"
   }
 ];
 

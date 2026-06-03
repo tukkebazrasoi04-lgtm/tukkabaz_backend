@@ -470,7 +470,7 @@ class AdminService {
       return {
         serviceId: row.serviceId,
         title: service?.title ?? "Unknown service",
-        type: service?.type ?? ServiceType.OTHER,
+        type: service?.type ?? ServiceType.RENT_SCOOTY,
         count: row._count._all,
         revenue: row._sum.amount ?? 0
       };

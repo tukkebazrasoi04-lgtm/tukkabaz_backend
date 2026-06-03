@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -247,10 +248,10 @@ enum Role {
 
 enum ServiceType {
   RENT_SCOOTY
-  TRIP
+  DRONE_SHOOT
   CAMPING
-  DRONE_SHOOTING
-  OTHER
+  TREKKING_WITH_CAMPING
+  CAB_AND_TAXI
 }
 
 enum BookingKind {
