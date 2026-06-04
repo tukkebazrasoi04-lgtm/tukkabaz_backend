@@ -125,42 +125,7 @@ export const updateDeliveryOrderStatusController = async (req: Request, res: Res
 
 export const createDeliveryPartnerController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const parsed = createDeliveryPartnerSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new AppError(400, "Invalid delivery partner body", parsed.error.flatten());
-    }
-
-    const { name, phone, password, currentLat, currentLng } = parsed.data;
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const existingApproved = await prisma.deliveryPartner.findFirst({
-      where: { phone: phone.trim(), profileStatus: "APPROVED" }
-    });
-    if (existingApproved) {
-      throw new AppError(409, "Phone number is already registered and verified");
-    }
-
-    try {
-      const partner = await prisma.deliveryPartner.create({
-        data: {
-          name: name.trim(),
-          phone: phone.trim(),
-          password: hashedPassword,
-          vehicleType: "Bike / Scooty",
-          currentLat,
-          currentLng
-        }
-      });
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password: _, ...partnerWithoutPassword } = partner;
-      sendSuccess(res, { message: "Delivery partner created", partner: partnerWithoutPassword }, 201);
-    } catch (dbError: any) {
-      if (dbError.code === 'P2002' && dbError.meta?.target?.includes('phone')) {
-        throw new AppError(409, "Phone number is already registered");
-      }
-      throw dbError;
-    }
+    throw new AppError(501, "Direct password signup is deprecated. Please use Google Sign-in.");
   } catch (error) {
     next(error);
   }
@@ -168,36 +133,7 @@ export const createDeliveryPartnerController = async (req: Request, res: Respons
 
 export const loginDeliveryPartnerController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const parsed = loginDeliveryPartnerSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new AppError(400, "Invalid login body", parsed.error.flatten());
-    }
-
-    const { phone, password } = parsed.data;
-
-    let partner = await prisma.deliveryPartner.findFirst({
-      where: { phone: phone.trim(), profileStatus: "APPROVED" }
-    });
-
-    if (!partner) {
-      partner = await prisma.deliveryPartner.findFirst({
-        where: { phone: phone.trim() },
-        orderBy: { updatedAt: "desc" }
-      });
-    }
-
-    if (!partner || !partner.password) {
-      throw new AppError(401, "Invalid phone or password");
-    }
-
-    const isMatch = await bcrypt.compare(password, partner.password);
-    if (!isMatch) {
-      throw new AppError(401, "Invalid phone or password");
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password: _, ...partnerWithoutPassword } = partner;
-    sendSuccess(res, { message: "Login successful", partner: partnerWithoutPassword });
+    throw new AppError(501, "Direct password login is deprecated. Please use Google Sign-in.");
   } catch (error) {
     next(error);
   }
@@ -740,32 +676,7 @@ export const requestPartnerPasswordResetController = async (req: Request, res: R
 
 export const resetPartnerPasswordController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const parsed = partnerPasswordResetSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new AppError(400, "Invalid request", parsed.error.flatten());
-    }
-
-    const { phone, otp, newPassword } = parsed.data;
-
-    // Verify OTP first
-    await otpService.verifyOtp(phone, "PASSWORD_RESET", otp);
-
-    const partner = await prisma.deliveryPartner.findFirst({
-      where: { phone: phone.trim() },
-      orderBy: { updatedAt: "desc" }
-    });
-
-    if (!partner) {
-      throw new AppError(404, "Delivery partner not found.");
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.deliveryPartner.updateMany({
-      where: { phone: phone.trim() },
-      data: { password: hashedPassword }
-    });
-
-    sendSuccess(res, { message: "Password reset successful" });
+    throw new AppError(501, "Password reset is not supported. Please use Google Sign-in.");
   } catch (error) {
     next(error);
   }
