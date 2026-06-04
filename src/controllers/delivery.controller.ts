@@ -222,7 +222,8 @@ export const updateDeliveryPartnerAvailabilityController = async (req: Request, 
       throw new AppError(400, "Invalid partner availability body", parsed.error.flatten());
     }
 
-    const response = await deliveryService.updatePartnerAvailability(partnerId, parsed.data.isAvailable);
+    const isOnline = parsed.data.isOnline !== undefined ? parsed.data.isOnline : parsed.data.isAvailable!;
+    const response = await deliveryService.updatePartnerAvailability(partnerId, isOnline);
     sendSuccess(res, response);
   } catch (error) {
     next(error);
@@ -572,7 +573,7 @@ export const verifyPartnerController = async (req: Request, res: Response, next:
       throw new AppError(400, "Invalid verify body — status must be APPROVED or REJECTED", parsed.error.flatten());
     }
 
-    const response = await deliveryService.verifyPartner(partnerId, parsed.data.status);
+    const response = await deliveryService.verifyPartner(partnerId, parsed.data.status, parsed.data.reason);
     sendSuccess(res, response);
   } catch (error) {
     next(error);

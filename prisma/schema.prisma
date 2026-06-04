@@ -9,24 +9,24 @@ datasource db {
 }
 
 model User {
-  id              String          @id @default(cuid())
-  firebaseUid     String          @unique
-  email           String          @unique
+  id              String           @id @default(cuid())
+  firebaseUid     String           @unique
+  email           String           @unique
   name            String
   picture         String?
-  role            Role            @default(CUSTOMER)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  role            Role             @default(CUSTOMER)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   passwordHash    String?
-  phone           String?         @unique
+  phone           String?          @unique
   phoneVerifiedAt DateTime?
   deliveryAddress String?
   pushToken       String?
   bookings        Booking[]
   deliveryOrders  DeliveryOrder[]
+  deliveryPartner DeliveryPartner?
   roomReviews     RoomReview[]
   sessions        Session[]
-  deliveryPartner DeliveryPartner?
 }
 
 model OtpVerification {
@@ -88,6 +88,7 @@ model Room {
   sleepDescription     String?
   roomPhotoTypes       String[]     @default([])
   roomPhotos           Json         @default("[]")
+  googleMapUrl         String?
   bookings             Booking[]
   reviews              RoomReview[]
 }
@@ -170,6 +171,7 @@ model DeliveryItem {
   grocerySection    String?
   servingInfo       String?
   pieces            String?
+  isVeg             Boolean          @default(true)
 
   @@index([category, isAvailable])
 }
@@ -223,11 +225,12 @@ model DeliveryPartner {
   upiId             String?
   profilePhotoUrl   String?
   pushToken         String?
-  orders            DeliveryOrder[]
-
-  userId            String?              @unique
   email             String?              @unique
-  user              User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId            String?              @unique
+  isOnline          Boolean              @default(false)
+  rejectionReason   String?
+  orders            DeliveryOrder[]
+  user              User?                @relation(fields: [userId], references: [id])
 
   @@index([phone])
   @@index([isAvailable])

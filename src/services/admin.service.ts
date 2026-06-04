@@ -19,6 +19,7 @@ type UpsertRoomInput = {
   sleepDescription?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  googleMapUrl?: string | null;
   capacity?: number;
   available?: boolean;
 };
@@ -156,6 +157,7 @@ class AdminService {
     const roomPhotos = buildRoomPhotos(input.roomPhotos, imageUrls, roomPhotoTypes, sleepTitle ?? "Bedroom");
     const latitude = normalizeCoordinate(input.latitude);
     const longitude = normalizeCoordinate(input.longitude);
+    const googleMapUrl = normalizeNullableString(input.googleMapUrl);
 
     const room = await prisma.room.create({
       data: {
@@ -175,6 +177,7 @@ class AdminService {
         sleepDescription: sleepDescription ?? null,
         latitude: latitude ?? null,
         longitude: longitude ?? null,
+        googleMapUrl: googleMapUrl ?? null,
         capacity: input.capacity ?? 2,
         available: input.available ?? true
       } as Prisma.RoomUncheckedCreateInput
@@ -213,6 +216,7 @@ class AdminService {
     const existingRoomPhotos = existingRoom.roomPhotos === null ? [] : (existingRoom.roomPhotos as Prisma.InputJsonValue);
     const latitude = normalizeCoordinate(input.latitude);
     const longitude = normalizeCoordinate(input.longitude);
+    const googleMapUrl = normalizeNullableString(input.googleMapUrl);
 
     const room = await prisma.room.update({
       where: { id },
@@ -233,6 +237,7 @@ class AdminService {
         sleepDescription: sleepDescription === undefined ? existingRoom.sleepDescription : sleepDescription,
         latitude: latitude === undefined ? existing.latitude : latitude,
         longitude: longitude === undefined ? existing.longitude : longitude,
+        googleMapUrl: googleMapUrl === undefined ? (existing as any).googleMapUrl : googleMapUrl,
         capacity: input.capacity ?? existing.capacity,
         available: input.available ?? existing.available
       } as Prisma.RoomUncheckedUpdateInput

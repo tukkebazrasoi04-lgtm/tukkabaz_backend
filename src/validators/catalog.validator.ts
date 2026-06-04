@@ -190,6 +190,7 @@ export const roomPayloadSchema = z.object({
   sleepDescription: nullableStringSchema(2, 120),
   latitude: nullableCoordinateSchema(-90, 90),
   longitude: nullableCoordinateSchema(-180, 180),
+  googleMapUrl: nullableUrlSchema,
   capacity: z.coerce.number().int().positive().optional(),
   available: z.boolean().optional()
 });

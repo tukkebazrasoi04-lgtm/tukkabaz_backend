@@ -340,10 +340,14 @@ class DeliveryService {
     return { partners };
   }
 
-  async updatePartnerAvailability(partnerId: string, isAvailable: boolean) {
+  async updatePartnerAvailability(partnerId: string, isOnline: boolean) {
+    const activeCount = await this.countActivePartnerOrders(partnerId);
     const partner = await prisma.deliveryPartner.update({
       where: { id: partnerId },
-      data: { isAvailable }
+      data: {
+        isOnline,
+        isAvailable: isOnline && activeCount < 2
+      }
     });
 
     return { message: "Delivery partner availability updated", partner };
@@ -389,9 +393,12 @@ class DeliveryService {
   }
 
   private async refreshPartnerCapacity(partnerId: string, currentOrderId?: string | null) {
+    const partner = await prisma.deliveryPartner.findUnique({ where: { id: partnerId } });
+    if (!partner) return;
+
     const activeCount = await this.countActivePartnerOrders(partnerId);
     const data: Prisma.DeliveryPartnerUpdateInput = {
-      isAvailable: activeCount < 2
+      isAvailable: partner.isOnline && activeCount < 2
     };
 
     if (currentOrderId !== undefined) {
@@ -564,6 +571,7 @@ class DeliveryService {
         grocerySection: input.category === DeliveryCategory.GROCERY ? input.grocerySection?.trim() || "Daily Essentials" : null,
         servingInfo: input.servingInfo?.trim() || null,
         pieces: input.pieces?.trim() || null,
+        isVeg: input.category === DeliveryCategory.FOOD ? (input.isVeg ?? true) : true,
         availableQuantity: input.availableQuantity,
         isAvailable: input.isAvailable ?? input.availableQuantity > 0
       } as Prisma.DeliveryItemUncheckedCreateInput
@@ -583,6 +591,7 @@ class DeliveryService {
         grocerySection: input.category === DeliveryCategory.GROCERY ? input.grocerySection?.trim() || "Daily Essentials" : null,
         servingInfo: input.servingInfo?.trim() || null,
         pieces: input.pieces?.trim() || null,
+        isVeg: input.category === DeliveryCategory.FOOD ? (input.isVeg ?? true) : true,
         availableQuantity: input.availableQuantity,
         isAvailable: input.isAvailable ?? input.availableQuantity > 0
       } as Prisma.DeliveryItemUncheckedUpdateInput
@@ -633,21 +642,59 @@ class DeliveryService {
   async getPendingPartners() {
     const partners = await prisma.deliveryPartner.findMany({
       where: { profileStatus: "PENDING" },
+      include: {
+        orders: {
+          where: { status: DeliveryOrderStatus.DELIVERED },
+          select: { partnerCut: true }
+        }
+      },
       orderBy: { updatedAt: "desc" }
     });
-    return { partners };
+
+    const enrichedPartners = partners.map(partner => {
+      const deliveredCount = partner.orders.length;
+      const totalEarnings = partner.orders.reduce((sum, order) => sum + (order.partnerCut ?? 0), 0);
+      
+      const { orders, ...rest } = partner;
+      return {
+        ...rest,
+        deliveredCount,
+        totalEarnings
+      };
+    });
+
+    return { partners: enrichedPartners };
   }
 
   /** Admin: fetch all partners */
   async getAllPartners() {
     const partners = await prisma.deliveryPartner.findMany({
+      include: {
+        orders: {
+          where: { status: DeliveryOrderStatus.DELIVERED },
+          select: { partnerCut: true }
+        }
+      },
       orderBy: { updatedAt: "desc" }
     });
-    return { partners };
+
+    const enrichedPartners = partners.map(partner => {
+      const deliveredCount = partner.orders.length;
+      const totalEarnings = partner.orders.reduce((sum, order) => sum + (order.partnerCut ?? 0), 0);
+      
+      const { orders, ...rest } = partner;
+      return {
+        ...rest,
+        deliveredCount,
+        totalEarnings
+      };
+    });
+
+    return { partners: enrichedPartners };
   }
 
   /** Admin: approve or reject a partner */
-  async verifyPartner(partnerId: string, decision: "APPROVED" | "REJECTED") {
+  async verifyPartner(partnerId: string, decision: "APPROVED" | "REJECTED", reason?: string) {
     const partner = await prisma.deliveryPartner.findUnique({ where: { id: partnerId } });
     if (!partner) {
       throw new AppError(404, "Delivery partner not found.");
@@ -674,7 +721,10 @@ class DeliveryService {
 
     const updated = await prisma.deliveryPartner.update({
       where: { id: partnerId },
-      data: { profileStatus: newStatus }
+      data: {
+        profileStatus: newStatus,
+        rejectionReason: newStatus === "REJECTED" ? (reason?.trim() || "Your document was unclear or invalid. Please upload a new, legible photo.") : null
+      }
     });
 
     return {

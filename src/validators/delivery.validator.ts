@@ -43,7 +43,8 @@ export const deliveryItemPayloadSchema = z.object({
   servingInfo: z.string().trim().min(1).max(80).nullable().optional(),
   pieces: z.string().trim().min(1).max(80).nullable().optional(),
   availableQuantity: z.coerce.number().int().min(0),
-  isAvailable: z.boolean().optional()
+  isAvailable: z.boolean().optional(),
+  isVeg: z.boolean().optional()
 });
 
 export const deliveryStatusSchema = z.object({
@@ -59,7 +60,10 @@ export const createDeliveryPartnerSchema = z.object({
 });
 
 export const partnerAvailabilitySchema = z.object({
-  isAvailable: z.boolean()
+  isAvailable: z.boolean().optional(),
+  isOnline: z.boolean().optional()
+}).refine(data => data.isAvailable !== undefined || data.isOnline !== undefined, {
+  message: "Either isAvailable or isOnline must be provided"
 });
 
 export const assignPartnerSchema = z.object({
@@ -106,7 +110,8 @@ export const dlUploadSchema = z.object({
 });
 
 export const partnerVerifySchema = z.object({
-  status: z.enum(["APPROVED", "REJECTED"])
+  status: z.enum(["APPROVED", "REJECTED"]),
+  reason: z.string().trim().max(500).optional()
 });
 
 export const loginDeliveryPartnerSchema = z.object({
