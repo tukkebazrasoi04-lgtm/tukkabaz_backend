@@ -564,7 +564,20 @@ class DeliveryService {
   }
 
   async assignPartner(orderId: string, partnerId: string) {
-    return this.acceptOrder(orderId, partnerId);
+    const res = await this.acceptOrder(orderId, partnerId);
+    const partner = await prisma.deliveryPartner.findUnique({
+      where: { id: partnerId },
+      select: { pushToken: true }
+    });
+    if (partner?.pushToken) {
+      await sendPushNotifications(
+        [partner.pushToken],
+        "Order Assigned",
+        `Order ${res.order.orderNumber} has been assigned to you!`,
+        { orderId }
+      ).catch((e) => console.error("Failed to send assignment push notification", e));
+    }
+    return res;
   }
 
   private assertPartnerOrder(order: DeliveryOrder | null, partnerId: string) {

@@ -17,12 +17,20 @@ import {
 } from "../controllers/admin.controller";
 import { authMiddleware, requireRoles } from "../middleware/auth.middleware";
 import { adminDeleteImageController, adminUploadMediaController } from "../controllers/media.controller";
+import { ServiceType } from "@prisma/client";
 
 const router = Router();
 
 router.post("/login", adminLoginController);
 
 router.use(authMiddleware, requireRoles("ADMIN"));
+router.get("/services/types", (req, res, next) => {
+  try {
+    res.json({ success: true, data: Object.values(ServiceType) });
+  } catch (err) {
+    next(err);
+  }
+});
 router.get("/analytics", adminAnalyticsController);
 router.get("/rooms", adminGetRoomsController);
 router.post("/rooms", adminCreateRoomController);

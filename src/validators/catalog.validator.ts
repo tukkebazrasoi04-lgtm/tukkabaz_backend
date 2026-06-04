@@ -210,6 +210,7 @@ export const servicePayloadSchema = z.object({
   latitude: nullableCoordinateSchema(-90, 90),
   longitude: nullableCoordinateSchema(-180, 180),
   ctaLabel: nullableStringSchema(2, 40),
+  googleMapUrl: nullableUrlSchema,
   available: z.boolean().optional()
 });
 

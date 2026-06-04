@@ -111,6 +111,7 @@ model Service {
   latitude          Float?
   longitude         Float?
   ctaLabel          String?
+  googleMapUrl      String?
   activityOptions   Json        @default("[]")
   bookings          Booking[]
 }

@@ -178,12 +178,14 @@ export const adminDeleteServiceController = async (
 };
 
 export const adminAnalyticsController = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const response = await adminService.getAnalytics();
+    const period = req.query.period as string | undefined;
+    const status = req.query.status as string | undefined;
+    const response = await adminService.getAnalytics({ period, status });
     sendSuccess(res, response);
   } catch (error) {
     next(error);

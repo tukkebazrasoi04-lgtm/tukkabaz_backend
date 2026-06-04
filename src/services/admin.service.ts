@@ -39,6 +39,7 @@ type UpsertServiceInput = {
   latitude?: number | null;
   longitude?: number | null;
   ctaLabel?: string | null;
+  googleMapUrl?: string | null;
   available?: boolean;
 };
 
@@ -265,6 +266,7 @@ class AdminService {
     const latitude = normalizeCoordinate(input.latitude);
     const longitude = normalizeCoordinate(input.longitude);
     const ctaLabel = normalizeNullableString(input.ctaLabel);
+    const googleMapUrl = normalizeNullableString(input.googleMapUrl);
 
     const service = await prisma.service.create({
       data: {
@@ -282,6 +284,7 @@ class AdminService {
         latitude: latitude ?? null,
         longitude: longitude ?? null,
         ctaLabel: ctaLabel ?? null,
+        googleMapUrl: googleMapUrl ?? null,
         available: input.available ?? true
       } as Prisma.ServiceUncheckedCreateInput
     });
@@ -314,6 +317,7 @@ class AdminService {
     const latitude = normalizeCoordinate(input.latitude);
     const longitude = normalizeCoordinate(input.longitude);
     const ctaLabel = normalizeNullableString(input.ctaLabel);
+    const googleMapUrl = normalizeNullableString(input.googleMapUrl);
     const existingDetailSections = existingService.detailSections === null
       ? []
       : (existingService.detailSections as Prisma.InputJsonValue);
@@ -338,6 +342,7 @@ class AdminService {
         latitude: latitude === undefined ? existingService.latitude : latitude,
         longitude: longitude === undefined ? existingService.longitude : longitude,
         ctaLabel: ctaLabel === undefined ? existingService.ctaLabel : ctaLabel,
+        googleMapUrl: googleMapUrl === undefined ? (existingService as any).googleMapUrl : googleMapUrl,
         available: input.available ?? existing.available
       } as Prisma.ServiceUncheckedUpdateInput
     });
@@ -355,56 +360,104 @@ class AdminService {
     return { message: "Service deleted" };
   }
 
-  async getAnalytics() {
-    const [totalBookings, successfulBookings, roomSuccessCount, serviceSuccessCount, revenue, totalDeliveryOrders, successfulDeliveryOrders, deliveryRevenue] =
-      await Promise.all([
-        prisma.booking.count(),
-        prisma.booking.count({
-          where: { paymentStatus: PaymentStatus.SUCCESS }
-        }),
-        prisma.booking.count({
-          where: { paymentStatus: PaymentStatus.SUCCESS, kind: BookingKind.ROOM }
-        }),
-        prisma.booking.count({
-          where: { paymentStatus: PaymentStatus.SUCCESS, kind: BookingKind.SERVICE }
-        }),
-        prisma.booking.aggregate({
-          where: { paymentStatus: PaymentStatus.SUCCESS },
-          _sum: { amount: true }
-        }),
-        prisma.deliveryOrder.count(),
-        prisma.deliveryOrder.count({
-          where: { paymentStatus: PaymentStatus.SUCCESS }
-        }),
-        prisma.deliveryOrder.aggregate({
-          where: { paymentStatus: PaymentStatus.SUCCESS },
-          _sum: { totalAmount: true }
-        })
-      ]);
+  async getAnalytics(options?: { period?: string; status?: string }) {
+    const period = options?.period;
+    const status = options?.status;
+
+    let dateFilter: { gte?: Date } | undefined = undefined;
+    const now = new Date();
+    if (period === "day") {
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      dateFilter = { gte: startOfToday };
+    } else if (period === "week") {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(now.getDate() - 7);
+      dateFilter = { gte: oneWeekAgo };
+    } else if (period === "month") {
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(now.getMonth() - 1);
+      dateFilter = { gte: oneMonthAgo };
+    }
+
+    const bookingWhere: Prisma.BookingWhereInput = {};
+    if (status && status !== "ALL") {
+      bookingWhere.paymentStatus = status as PaymentStatus;
+    }
+    if (dateFilter) {
+      bookingWhere.createdAt = dateFilter;
+    }
+
+    const deliveryWhere: Prisma.DeliveryOrderWhereInput = {};
+    if (status && status !== "ALL") {
+      deliveryWhere.paymentStatus = status as PaymentStatus;
+    }
+    if (dateFilter) {
+      deliveryWhere.createdAt = dateFilter;
+    }
+
+    const isSuccessCompatible = !status || status === "ALL" || status === "SUCCESS";
+
+    const [
+      totalBookings,
+      successfulBookings,
+      roomSuccessCount,
+      serviceSuccessCount,
+      revenue,
+      totalDeliveryOrders,
+      successfulDeliveryOrders,
+      deliveryRevenue
+    ] = await Promise.all([
+      prisma.booking.count({ where: bookingWhere }),
+      isSuccessCompatible
+        ? prisma.booking.count({ where: { createdAt: dateFilter, paymentStatus: PaymentStatus.SUCCESS } })
+        : Promise.resolve(0),
+      isSuccessCompatible
+        ? prisma.booking.count({ where: { createdAt: dateFilter, paymentStatus: PaymentStatus.SUCCESS, kind: BookingKind.ROOM } })
+        : Promise.resolve(0),
+      isSuccessCompatible
+        ? prisma.booking.count({ where: { createdAt: dateFilter, paymentStatus: PaymentStatus.SUCCESS, kind: BookingKind.SERVICE } })
+        : Promise.resolve(0),
+      isSuccessCompatible
+        ? prisma.booking.aggregate({ where: { createdAt: dateFilter, paymentStatus: PaymentStatus.SUCCESS }, _sum: { amount: true } })
+        : Promise.resolve({ _sum: { amount: null } }),
+      prisma.deliveryOrder.count({ where: deliveryWhere }),
+      isSuccessCompatible
+        ? prisma.deliveryOrder.count({ where: { createdAt: dateFilter, paymentStatus: PaymentStatus.SUCCESS } })
+        : Promise.resolve(0),
+      isSuccessCompatible
+        ? prisma.deliveryOrder.aggregate({ where: { createdAt: dateFilter, paymentStatus: PaymentStatus.SUCCESS }, _sum: { totalAmount: true } })
+        : Promise.resolve({ _sum: { totalAmount: null } })
+    ]);
 
     const [roomBreakdownRaw, serviceBreakdownRaw] = await Promise.all([
-      prisma.booking.groupBy({
-        by: ["roomId"],
-        where: {
-          paymentStatus: PaymentStatus.SUCCESS,
-          kind: BookingKind.ROOM,
-          roomId: { not: null }
-        },
-        _count: { _all: true },
-        _sum: { amount: true },
-        orderBy: { _count: { roomId: "desc" } }
-      }),
-      prisma.booking.groupBy({
-        by: ["serviceId"],
-        where: {
-          paymentStatus: PaymentStatus.SUCCESS,
-          kind: BookingKind.SERVICE,
-          serviceId: { not: null }
-        },
-        _count: { _all: true },
-        _sum: { amount: true },
-        orderBy: { _count: { serviceId: "desc" } }
-      })
+      isSuccessCompatible
+        ? prisma.booking.groupBy({
+            by: ["roomId"],
+            where: {
+              createdAt: dateFilter,
+              paymentStatus: PaymentStatus.SUCCESS,
+              kind: BookingKind.ROOM,
+              roomId: { not: null }
+            },
+            _count: { _all: true },
+            _sum: { amount: true },
+            orderBy: { _count: { roomId: "desc" } }
+          })
+        : Promise.resolve([]),
+      isSuccessCompatible
+        ? prisma.booking.groupBy({
+            by: ["serviceId"],
+            where: {
+              createdAt: dateFilter,
+              paymentStatus: PaymentStatus.SUCCESS,
+              kind: BookingKind.SERVICE,
+              serviceId: { not: null }
+            },
+            _count: { _all: true },
+            _sum: { amount: true },
+            orderBy: { _count: { serviceId: "desc" } }
+          })
+        : Promise.resolve([])
     ]);
 
     const roomIds = roomBreakdownRaw.map((r) => r.roomId).filter((id): id is string => Boolean(id));
@@ -424,6 +477,7 @@ class AdminService {
           })
         : Promise.resolve([]),
       prisma.booking.findMany({
+        where: bookingWhere,
         include: {
           user: {
             select: {
@@ -441,6 +495,7 @@ class AdminService {
         take: 30
       }),
       prisma.deliveryOrder.findMany({
+        where: deliveryWhere,
         include: {
           user: {
             select: {
