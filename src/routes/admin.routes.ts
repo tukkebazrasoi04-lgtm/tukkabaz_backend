@@ -34,7 +34,7 @@ router.post("/services", adminCreateServiceController);
 router.put("/services/:id", adminUpdateServiceController);
 router.delete("/services/:id", adminDeleteServiceController);
 router.post("/media/upload", adminUploadMediaController);
-router.delete("/media/:public_id", adminDeleteImageController);
+router.delete("/media/:public_id(.*)", adminDeleteImageController);
 
 router.get("/partner-payouts", adminGetPartnerPayoutsController);
 router.post("/partner-payouts/:id/clear", adminClearPartnerPayoutController);

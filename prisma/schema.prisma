@@ -26,6 +26,7 @@ model User {
   deliveryOrders  DeliveryOrder[]
   roomReviews     RoomReview[]
   sessions        Session[]
+  deliveryPartner DeliveryPartner?
 }
 
 model OtpVerification {
@@ -208,7 +209,7 @@ model DeliveryOrder {
 model DeliveryPartner {
   id                String               @id @default(cuid())
   name              String
-  phone             String
+  phone             String?
   vehicleType       String
   isAvailable       Boolean              @default(true)
   currentOrderId    String?
@@ -220,10 +221,13 @@ model DeliveryPartner {
   profileStatus     PartnerProfileStatus @default(INCOMPLETE)
   payoutRequestedAt DateTime?
   upiId             String?
-  password          String?
   profilePhotoUrl   String?
   pushToken         String?
   orders            DeliveryOrder[]
+
+  userId            String?              @unique
+  email             String?              @unique
+  user              User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([phone])
   @@index([isAvailable])

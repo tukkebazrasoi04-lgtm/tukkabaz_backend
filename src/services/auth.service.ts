@@ -34,7 +34,20 @@ const userSelect = {
   deliveryAddress: true,
   role: true,
   createdAt: true,
-  updatedAt: true
+  updatedAt: true,
+  deliveryPartner: {
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      vehicleType: true,
+      isAvailable: true,
+      profileStatus: true,
+      profilePhotoUrl: true,
+      dlUrl: true,
+      pushToken: true
+    }
+  }
 } as const;
 
 const getDefaultName = (email: string): string => email.split("@")[0];
@@ -598,6 +611,125 @@ class AuthService {
     }
 
     return { message: "Logged out successfully" };
+  }
+
+  async authenticatePartnerWithFirebase(idToken: string, meta: SessionMeta) {
+    let decoded;
+    try {
+      decoded = await firebaseAuth.verifyIdToken(idToken);
+    } catch (error: any) {
+      logger.error("Firebase token verification failed", { error });
+      throw new AppError(401, `Firebase token verification failed: ${error.message || "Invalid token"}`);
+    }
+    const firebaseUid = decoded.uid;
+    const email = decoded.email?.toLowerCase();
+    const emailVerified = decoded.email_verified;
+    const name = decoded.name?.trim();
+    const picture = decoded.picture ?? null;
+
+    if (!email) {
+      throw new AppError(401, "Email is missing in Firebase token");
+    }
+
+    if (!emailVerified) {
+      throw new AppError(401, "Email is not verified");
+    }
+
+    let user = await prisma.user.findUnique({
+      where: { firebaseUid }
+    });
+
+    if (!user) {
+      const userByEmail = await prisma.user.findUnique({
+        where: { email }
+      });
+
+      if (userByEmail) {
+        user = await prisma.user.update({
+          where: { id: userByEmail.id },
+          data: {
+            firebaseUid,
+            name: name || userByEmail.name,
+            picture,
+            role: "DELIVERY"
+          }
+        });
+      } else {
+        user = await prisma.user.create({
+          data: {
+            firebaseUid,
+            email,
+            name: name || getDefaultName(email),
+            picture,
+            role: "DELIVERY"
+          }
+        });
+      }
+    } else {
+      const shouldUpdateRole = user.role !== "ADMIN" && user.role !== "DELIVERY";
+      const shouldUpdateName = Boolean(name && name !== user.name);
+      const shouldUpdatePicture = picture !== user.picture;
+      const shouldUpdateEmail = email !== user.email;
+
+      if (shouldUpdateRole || shouldUpdateName || shouldUpdatePicture || shouldUpdateEmail) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            ...(shouldUpdateRole ? { role: "DELIVERY" } : {}),
+            ...(shouldUpdateName ? { name } : {}),
+            ...(shouldUpdatePicture ? { picture } : {}),
+            ...(shouldUpdateEmail ? { email } : {})
+          }
+        });
+      }
+    }
+
+    let partner = await prisma.deliveryPartner.findUnique({
+      where: { userId: user.id }
+    });
+
+    if (!partner) {
+      partner = await prisma.deliveryPartner.findUnique({
+        where: { email }
+      });
+
+      if (partner) {
+        partner = await prisma.deliveryPartner.update({
+          where: { id: partner.id },
+          data: { userId: user.id }
+        });
+      } else {
+        partner = await prisma.deliveryPartner.create({
+          data: {
+            userId: user.id,
+            email: user.email,
+            name: user.name,
+            phone: null,
+            vehicleType: "Bike / Scooty",
+            profileStatus: "INCOMPLETE"
+          }
+        });
+      }
+    }
+
+    const { accessToken, refreshToken } = await this.issueSessionForUser(user, meta);
+
+    const safeUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: userSelect
+    });
+
+    if (!safeUser) {
+      throw new AppError(404, "User not found");
+    }
+
+    return {
+      message: "Login successful",
+      user: safeUser,
+      partner,
+      accessToken,
+      refreshToken
+    };
   }
 }
 

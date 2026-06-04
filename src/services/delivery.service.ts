@@ -622,7 +622,7 @@ class DeliveryService {
 
     notifyAdminPartnerApplication({
       partnerName: updated.name ?? 'Unknown',
-      phone: updated.phone,
+      phone: updated.phone ?? 'No phone',
       vehicleType: updated.vehicleType
     });
 

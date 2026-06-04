@@ -98,9 +98,11 @@ export const partnerOrderActionSchema = z.object({
 export const dlUploadSchema = z.object({
   dlUrl: z.string().url("dlUrl must be a valid URL").optional(),
   imageBase64: z.string().optional(),
-  profilePhotoUrl: z.string().url("profilePhotoUrl must be a valid URL").optional()
-}).refine(data => data.dlUrl || data.imageBase64 || data.profilePhotoUrl, {
-  message: "Either dlUrl, imageBase64, or profilePhotoUrl is required"
+  profilePhotoUrl: z.string().url("profilePhotoUrl must be a valid URL").optional(),
+  profileImageBase64: z.string().optional(),
+  phone: z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits").optional()
+}).refine(data => data.dlUrl || data.imageBase64 || data.profilePhotoUrl || data.profileImageBase64 || data.phone, {
+  message: "At least one detail (dlUrl, imageBase64, profilePhotoUrl, profileImageBase64, or phone) must be provided"
 });
 
 export const partnerVerifySchema = z.object({

@@ -3,6 +3,7 @@ import { AppError } from "../middleware/error.middleware";
 import { deliveryService } from "../services/delivery.service";
 import { uploadService } from "../services/upload.service";
 import { sendSuccess } from "../utils/api-response";
+import { authService } from "../services/auth.service";
 import {
   assignPartnerSchema,
   createDeliveryOrderSchema,
@@ -26,6 +27,8 @@ import {
   partnerPasswordResetSchema
 } from "../validators/delivery.validator";
 import bcrypt from "bcrypt";
+import { normalizePhone } from "../services/otp.service";
+import { notifyAdminPartnerApplication } from "../utils/notify-admin";
 import { prisma } from "../lib/prisma";
 import { otpService } from "../services/otp.service";
 
@@ -518,8 +521,14 @@ export const uploadPartnerDlController = async (req: Request, res: Response, nex
       throw new AppError(400, "Invalid DL upload body", parsed.error.flatten());
     }
 
-    let finalDlUrl = parsed.data.dlUrl;
+    const currentPartner = await prisma.deliveryPartner.findUnique({ where: { id: partnerId } });
+    if (!currentPartner) {
+      throw new AppError(404, "Delivery partner not found.");
+    }
 
+    const dataToUpdate: any = {};
+
+    let finalDlUrl = parsed.data.dlUrl;
     if (parsed.data.imageBase64) {
       const uploadRes = await uploadService.uploadImage({
         imageBase64: parsed.data.imageBase64,
@@ -527,14 +536,41 @@ export const uploadPartnerDlController = async (req: Request, res: Response, nex
       });
       finalDlUrl = uploadRes.url;
     }
-
-    const dataToUpdate: any = {};
     if (finalDlUrl) {
       dataToUpdate.dlUrl = finalDlUrl;
-      dataToUpdate.profileStatus = "PENDING";
     }
-    if (parsed.data.profilePhotoUrl) {
-      dataToUpdate.profilePhotoUrl = parsed.data.profilePhotoUrl;
+
+    let finalProfilePhotoUrl = parsed.data.profilePhotoUrl;
+    if (parsed.data.profileImageBase64) {
+      const uploadRes = await uploadService.uploadImage({
+        imageBase64: parsed.data.profileImageBase64,
+        folder: "tukkabaz/partner_profile"
+      });
+      finalProfilePhotoUrl = uploadRes.url;
+    }
+    if (finalProfilePhotoUrl) {
+      dataToUpdate.profilePhotoUrl = finalProfilePhotoUrl;
+    }
+
+    if (parsed.data.phone) {
+      const normalizedPhone = normalizePhone(parsed.data.phone);
+      const existingApproved = await prisma.deliveryPartner.findFirst({
+        where: { phone: normalizedPhone, profileStatus: "APPROVED", id: { not: partnerId } }
+      });
+      if (existingApproved) {
+        throw new AppError(409, "This phone number is already registered and verified by another partner.");
+      }
+      dataToUpdate.phone = normalizedPhone;
+    }
+
+    const hasDl = dataToUpdate.dlUrl || currentPartner.dlUrl;
+    const hasProfile = dataToUpdate.profilePhotoUrl || currentPartner.profilePhotoUrl;
+    const hasPhone = dataToUpdate.phone || currentPartner.phone;
+
+    if (hasDl && hasProfile && hasPhone) {
+      dataToUpdate.profileStatus = "PENDING";
+    } else {
+      dataToUpdate.profileStatus = "INCOMPLETE";
     }
 
     if (Object.keys(dataToUpdate).length === 0) {
@@ -545,6 +581,18 @@ export const uploadPartnerDlController = async (req: Request, res: Response, nex
       where: { id: partnerId },
       data: dataToUpdate
     });
+
+    if (dataToUpdate.profileStatus === "PENDING" && currentPartner.profileStatus !== "PENDING") {
+      try {
+        notifyAdminPartnerApplication({
+          partnerName: partner.name || "Unknown",
+          phone: partner.phone || "No phone",
+          vehicleType: partner.vehicleType
+        });
+      } catch (err) {
+        // Log notification error but don't fail request
+      }
+    }
 
     sendSuccess(res, { message: "Partner profile updated successfully.", partner });
   } catch (error) {
@@ -718,6 +766,24 @@ export const resetPartnerPasswordController = async (req: Request, res: Response
     });
 
     sendSuccess(res, { message: "Password reset successful" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const googleDeliveryPartnerAuthController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken || typeof idToken !== "string") {
+      throw new AppError(400, "Firebase idToken is required");
+    }
+
+    const response = await authService.authenticatePartnerWithFirebase(idToken, {
+      userAgent: req.get("user-agent") || undefined,
+      ipAddress: req.ip
+    });
+
+    sendSuccess(res, response);
   } catch (error) {
     next(error);
   }
