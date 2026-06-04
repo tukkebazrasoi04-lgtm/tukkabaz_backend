@@ -1,0 +1,2 @@
+-- Column already exists in database.
+-- Migration created only to align migration history.

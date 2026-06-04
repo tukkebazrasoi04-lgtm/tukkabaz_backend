@@ -148,7 +148,31 @@ class DeliveryService {
       };
     });
 
-    const totalAmount = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    const config = await this.getDeliveryConfig();
+    const itemsSubtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+
+    let deliveryFee = 0;
+    if (itemsSubtotal < config.freeDeliveryThreshold) {
+      if (input.destinationLat !== undefined && input.destinationLng !== undefined) {
+        const KITCHEN_LAT = 29.4727;
+        const KITCHEN_LNG = 79.6479;
+        const distance = this.calculateHaversineDistance(
+          KITCHEN_LAT,
+          KITCHEN_LNG,
+          input.destinationLat,
+          input.destinationLng
+        );
+        deliveryFee = Math.max(
+          config.baseDeliveryFee,
+          Math.round(config.baseDeliveryFee + distance * config.deliveryFeePerKm)
+        );
+      } else {
+        deliveryFee = config.baseDeliveryFee;
+      }
+    }
+
+    const totalAmount = itemsSubtotal + deliveryFee;
+    const partnerCut = config.defaultRiderCut;
 
     const orderCount = await prisma.deliveryOrder.count();
     const orderNumber = `ORD-${new Date().getFullYear()}-${String(orderCount + 1).padStart(6, "0")}`;
@@ -194,7 +218,10 @@ class DeliveryService {
         orderNumber,
         userId,
         items: orderItems as Prisma.InputJsonValue,
+        itemsSubtotal,
+        deliveryFee,
         totalAmount,
+        partnerCut,
         paymentProvider: input.paymentProvider?.trim() || "SIMULATED",
         paymentReference,
         paymentStatus,
@@ -364,7 +391,8 @@ class DeliveryService {
           tokens,
           "New Delivery Order Available",
           `Order ${order.orderNumber} is ready for pickup!`,
-          { orderId: order.id }
+          { orderId: order.id },
+          'high-priority-orders'
         ).catch(e => console.error("Failed to send push notification", e));
       }
     }
@@ -434,6 +462,15 @@ class DeliveryService {
     }
 
     return { message: "Kitchen logged in" };
+  }
+
+  async registerKitchenPushToken(token: string) {
+    await prisma.kitchenDevice.upsert({
+      where: { pushToken: token },
+      update: { updatedAt: new Date() },
+      create: { pushToken: token }
+    });
+    return { message: "Push token registered successfully" };
   }
 
   async getAvailablePartners() {
@@ -574,7 +611,8 @@ class DeliveryService {
         [partner.pushToken],
         "Order Assigned",
         `Order ${res.order.orderNumber} has been assigned to you!`,
-        { orderId }
+        { orderId },
+        'high-priority-orders'
       ).catch((e) => console.error("Failed to send assignment push notification", e));
     }
     return res;
@@ -897,6 +935,34 @@ class DeliveryService {
       data: { payoutRequestedAt: new Date() }
     });
     return { message: "Payout requested", partner };
+  }
+
+  async getDeliveryConfig() {
+    let config = await prisma.deliveryConfig.findUnique({ where: { id: "default" } });
+    if (!config) {
+      config = await prisma.deliveryConfig.create({
+        data: {
+          id: "default",
+          baseDeliveryFee: 30,
+          deliveryFeePerKm: 15,
+          freeDeliveryThreshold: 500,
+          defaultRiderCut: 50
+        }
+      });
+    }
+    return config;
+  }
+
+  calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
   }
 }
 

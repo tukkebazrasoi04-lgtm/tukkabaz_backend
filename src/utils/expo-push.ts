@@ -3,7 +3,7 @@ import { logger } from './logger';
 
 const expo = new Expo();
 
-export const sendPushNotifications = async (tokens: string[], title: string, body: string, data?: any) => {
+export const sendPushNotifications = async (tokens: string[], title: string, body: string, data?: any, channelId?: string) => {
   const messages: ExpoPushMessage[] = [];
   
   for (let pushToken of tokens) {
@@ -17,6 +17,7 @@ export const sendPushNotifications = async (tokens: string[], title: string, bod
       title,
       body,
       data: data || {},
+      channelId,
     });
   }
 

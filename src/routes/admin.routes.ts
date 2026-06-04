@@ -13,7 +13,8 @@ import {
   adminUpdateServiceController,
   adminGetPartnerPayoutsController,
   adminClearPartnerPayoutController,
-  adminUpdatePushTokenController
+  adminUpdatePushTokenController,
+  adminUpdateDeliveryConfigController
 } from "../controllers/admin.controller";
 import { authMiddleware, requireRoles } from "../middleware/auth.middleware";
 import { adminDeleteImageController, adminUploadMediaController } from "../controllers/media.controller";
@@ -47,5 +48,6 @@ router.delete("/media/:public_id(.*)", adminDeleteImageController);
 router.get("/partner-payouts", adminGetPartnerPayoutsController);
 router.post("/partner-payouts/:id/clear", adminClearPartnerPayoutController);
 router.patch("/push-token", adminUpdatePushTokenController);
+router.post("/delivery-config", adminUpdateDeliveryConfigController);
 
 export default router;

@@ -26,6 +26,7 @@ import {
   updateDeliveryPartnerAvailabilityController,
   updateDeliveryPartnerLocationController,
   verifyKitchenOtpController,
+  registerKitchenPushTokenController,
   verifyDeliveryPartnerOtpController,
   uploadPartnerDlController,
   getPendingPartnersController,
@@ -38,7 +39,8 @@ import {
   updatePartnerPushTokenController,
   requestPartnerPasswordResetController,
   resetPartnerPasswordController,
-  googleDeliveryPartnerAuthController
+  googleDeliveryPartnerAuthController,
+  getDeliveryConfigController
 } from "../controllers/delivery.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 
@@ -46,6 +48,7 @@ const router = Router();
 
 router.get("/items", getDeliveryItemsController);
 router.get("/contact", getDeliveryContactController);
+router.get("/config", getDeliveryConfigController);
 
 router.post("/orders", authMiddleware, createDeliveryOrderController);
 router.post("/orders/confirm", authMiddleware, confirmDeliveryPaymentController);
@@ -78,6 +81,7 @@ router.post("/partners/:id/request-payout", requestPartnerPayoutController);
 router.get("/kitchen/orders", getKitchenDeliveryOrdersController);
 router.post("/kitchen/request-otp", requestKitchenOtpController);
 router.post("/kitchen/verify-otp", verifyKitchenOtpController);
+router.post("/kitchen/push-token", registerKitchenPushTokenController);
 router.patch("/kitchen/orders/:id/status", updateDeliveryOrderStatusController);
 router.get("/kitchen/items", getKitchenDeliveryItemsController);
 router.post("/kitchen/items", createKitchenDeliveryItemController);

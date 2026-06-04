@@ -32,9 +32,13 @@ const shutdown = async (signal: string): Promise<void> => {
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
+import { startKitchenAlertLoop } from "./utils/kitchen-alerts";
+
 const start = async (): Promise<void> => {
   try {
     await bootstrap();
+
+    startKitchenAlertLoop();
 
     server = app.listen(env.PORT, "0.0.0.0", () => {
       logger.info("server:started", {

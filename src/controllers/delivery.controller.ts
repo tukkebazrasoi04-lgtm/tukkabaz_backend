@@ -196,6 +196,19 @@ export const verifyKitchenOtpController = async (req: Request, res: Response, ne
   }
 };
 
+export const registerKitchenPushTokenController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { token } = req.body;
+    if (!token || typeof token !== 'string') {
+      throw new AppError(400, "Valid token string is required");
+    }
+    const response = await deliveryService.registerKitchenPushToken(token);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getAvailableDeliveryPartnersController = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const partners = await prisma.deliveryPartner.findMany({
@@ -714,6 +727,15 @@ export const confirmDeliveryPaymentController = async (req: Request, res: Respon
     }
 
     const response = await deliveryService.confirmDeliveryPayment(req.user.userId, parsed.data);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getDeliveryConfigController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const response = await deliveryService.getDeliveryConfig();
     sendSuccess(res, response);
   } catch (error) {
     next(error);

@@ -10,6 +10,7 @@ import {
   servicePayloadSchema,
   uploadImageSchema
 } from "../validators/catalog.validator";
+import { updateDeliveryConfigSchema } from "../validators/delivery.validator";
 
 export const adminLoginController = async (
   req: Request,
@@ -271,6 +272,24 @@ export const adminUpdatePushTokenController = async (
     });
 
     sendSuccess(res, { message: "Push token updated" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminUpdateDeliveryConfigController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const parsed = updateDeliveryConfigSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid delivery config body", parsed.error.flatten());
+    }
+
+    const response = await adminService.updateDeliveryConfig(parsed.data);
+    sendSuccess(res, response);
   } catch (error) {
     next(error);
   }

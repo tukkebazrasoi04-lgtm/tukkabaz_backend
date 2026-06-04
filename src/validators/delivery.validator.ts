@@ -148,3 +148,12 @@ export type DeliveryItemPayloadInput = z.infer<typeof deliveryItemPayloadSchema>
 export type DlUploadInput = z.infer<typeof dlUploadSchema>;
 export type PartnerVerifyInput = z.infer<typeof partnerVerifySchema>;
 export type ConfirmDeliveryPaymentInput = z.infer<typeof confirmDeliveryPaymentSchema>;
+
+export const updateDeliveryConfigSchema = z.object({
+  baseDeliveryFee: z.coerce.number().int().min(0),
+  deliveryFeePerKm: z.coerce.number().int().min(0),
+  freeDeliveryThreshold: z.coerce.number().int().min(0),
+  defaultRiderCut: z.coerce.number().int().min(0)
+});
+
+export type UpdateDeliveryConfigInput = z.infer<typeof updateDeliveryConfigSchema>;

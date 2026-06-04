@@ -623,6 +623,31 @@ class AdminService {
 
     return { message: "Payout cleared successfully", ...result };
   }
+
+  async updateDeliveryConfig(input: {
+    baseDeliveryFee: number;
+    deliveryFeePerKm: number;
+    freeDeliveryThreshold: number;
+    defaultRiderCut: number;
+  }) {
+    const config = await prisma.deliveryConfig.upsert({
+      where: { id: "default" },
+      update: {
+        baseDeliveryFee: input.baseDeliveryFee,
+        deliveryFeePerKm: input.deliveryFeePerKm,
+        freeDeliveryThreshold: input.freeDeliveryThreshold,
+        defaultRiderCut: input.defaultRiderCut
+      },
+      create: {
+        id: "default",
+        baseDeliveryFee: input.baseDeliveryFee,
+        deliveryFeePerKm: input.deliveryFeePerKm,
+        freeDeliveryThreshold: input.freeDeliveryThreshold,
+        defaultRiderCut: input.defaultRiderCut
+      }
+    });
+    return config;
+  }
 }
 
 export const adminService = new AdminService();
