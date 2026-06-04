@@ -40,7 +40,9 @@ const envSchema = z.object({
   OTP_DEV_MODE: booleanString.default(false),
   KITCHEN_PHONE_NUMBER: z.string().min(7).optional(),
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
-  TELEGRAM_CHAT_ID: z.string().min(1).optional()
+  TELEGRAM_CHAT_ID: z.string().min(1).optional(),
+  RAZORPAY_KEY_ID: z.string().min(1).optional(),
+  RAZORPAY_KEY_SECRET: z.string().min(1).optional()
 });
 
 const parsed = envSchema.safeParse(process.env);

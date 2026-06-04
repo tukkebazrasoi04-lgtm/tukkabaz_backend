@@ -24,7 +24,8 @@ import {
   loginDeliveryPartnerSchema,
   updatePushTokenSchema,
   partnerPasswordResetRequestSchema,
-  partnerPasswordResetSchema
+  partnerPasswordResetSchema,
+  confirmDeliveryPaymentSchema
 } from "../validators/delivery.validator";
 import bcrypt from "bcrypt";
 import { normalizePhone } from "../services/otp.service";
@@ -695,6 +696,24 @@ export const googleDeliveryPartnerAuthController = async (req: Request, res: Res
       ipAddress: req.ip
     });
 
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const confirmDeliveryPaymentController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+
+    const parsed = confirmDeliveryPaymentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid delivery payment confirmation body", parsed.error.flatten());
+    }
+
+    const response = await deliveryService.confirmDeliveryPayment(req.user.userId, parsed.data);
     sendSuccess(res, response);
   } catch (error) {
     next(error);

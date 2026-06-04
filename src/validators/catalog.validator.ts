@@ -226,7 +226,10 @@ export const createBookingIntentSchema = z.object({
 export const confirmBookingPaymentSchema = z.object({
   bookingId: z.string().min(1),
   paymentReference: z.string().min(1).optional(),
-  success: z.boolean()
+  success: z.boolean(),
+  razorpayPaymentId: z.string().optional(),
+  razorpayOrderId: z.string().optional(),
+  razorpaySignature: z.string().optional()
 });
 
 export const uploadImageSchema = z.object({

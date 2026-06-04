@@ -1,7 +1,23 @@
 import { BookingKind, PaymentStatus, type Prisma } from "@prisma/client";
+import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { notifyAdminNewBooking } from "../utils/notify-admin";
+import { env } from "../config/env";
+import { createRazorpayOrder } from "../utils/razorpay";
+
+async function generatePaymentReference(amount: number, receiptId: string): Promise<string> {
+  const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = env;
+  if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
+    try {
+      const order = await createRazorpayOrder(amount, receiptId);
+      return order.id;
+    } catch (error) {
+      console.error("Failed to create Razorpay Order, falling back to simulated payment reference:", error);
+    }
+  }
+  return `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+}
 
 type CreateBookingIntentInput = {
   kind: BookingKind;
@@ -22,6 +38,9 @@ type ConfirmBookingPaymentInput = {
   bookingId: string;
   paymentReference?: string;
   success: boolean;
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
+  razorpaySignature?: string;
 };
 
 class BookingService {
@@ -57,7 +76,8 @@ class BookingService {
       }
 
       const amount = room.price * quantity;
-      const paymentReference = `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      const bookingReceiptId = `rec_room_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const paymentReference = await generatePaymentReference(amount, bookingReceiptId);
 
       const booking = await prisma.booking.create({
         data: {
@@ -99,7 +119,8 @@ class BookingService {
     }));
     const addOnTotal = selectedActivityOptions.reduce((sum, option) => sum + option.pricePerGuest * quantity, 0);
     const amount = service.price * quantity + addOnTotal;
-    const paymentReference = `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const bookingReceiptId = `rec_svc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const paymentReference = await generatePaymentReference(amount, bookingReceiptId);
 
     const booking = await prisma.booking.create({
       data: {
@@ -145,11 +166,36 @@ class BookingService {
       };
     }
 
+    if (input.success && booking.paymentReference?.startsWith("order_")) {
+      const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = input;
+      if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+        throw new AppError(400, "Missing Razorpay verification credentials.");
+      }
+
+      const { RAZORPAY_KEY_SECRET } = env;
+      if (!RAZORPAY_KEY_SECRET) {
+        throw new AppError(500, "Razorpay secret key is not configured on the server.");
+      }
+
+      if (booking.paymentReference !== razorpayOrderId) {
+        throw new AppError(400, "Order ID mismatch.");
+      }
+
+      const expectedSignature = crypto
+        .createHmac("sha256", RAZORPAY_KEY_SECRET)
+        .update(razorpayOrderId + "|" + razorpayPaymentId)
+        .digest("hex");
+
+      if (expectedSignature !== razorpaySignature) {
+        throw new AppError(400, "Payment verification failed - signature mismatch.");
+      }
+    }
+
     const updated = await prisma.booking.update({
       where: { id: booking.id },
       data: {
         paymentStatus: input.success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED,
-        paymentReference: input.paymentReference ?? booking.paymentReference
+        paymentReference: input.razorpayPaymentId ?? input.paymentReference ?? booking.paymentReference
       },
       include: {
         room: true,

@@ -133,8 +133,18 @@ export const partnerPasswordResetSchema = z.object({
   newPassword: z.string().min(6, "Password must be at least 6 characters")
 });
 
+export const confirmDeliveryPaymentSchema = z.object({
+  orderId: z.string().min(1),
+  success: z.boolean(),
+  paymentReference: z.string().optional(),
+  razorpayPaymentId: z.string().optional(),
+  razorpayOrderId: z.string().optional(),
+  razorpaySignature: z.string().optional()
+});
+
 export type CreateDeliveryOrderInput = z.infer<typeof createDeliveryOrderSchema>;
 export type CreateDeliveryPartnerInput = z.infer<typeof createDeliveryPartnerSchema>;
 export type DeliveryItemPayloadInput = z.infer<typeof deliveryItemPayloadSchema>;
 export type DlUploadInput = z.infer<typeof dlUploadSchema>;
 export type PartnerVerifyInput = z.infer<typeof partnerVerifySchema>;
+export type ConfirmDeliveryPaymentInput = z.infer<typeof confirmDeliveryPaymentSchema>;

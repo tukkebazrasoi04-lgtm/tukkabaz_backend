@@ -1,4 +1,5 @@
 import { DeliveryCategory, DeliveryOrderStatus, PaymentStatus, type DeliveryOrder, type Prisma, type Role } from "@prisma/client";
+import crypto from "crypto";
 import { env } from "../config/env";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
@@ -6,6 +7,7 @@ import type { CreateDeliveryOrderInput, CreateDeliveryPartnerInput, DeliveryItem
 import { normalizePhone } from "./otp.service";
 import { notifyAdminPartnerApplication, notifyAdminNewDeliveryOrder } from "../utils/notify-admin";
 import { sendPushNotifications } from "../utils/expo-push";
+import { createRazorpayOrder } from "../utils/razorpay";
 
 
 const partnerAvailableStatuses = new Set<DeliveryOrderStatus>([
@@ -148,6 +150,28 @@ class DeliveryService {
 
     const totalAmount = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
 
+    const orderCount = await prisma.deliveryOrder.count();
+    const orderNumber = `ORD-${new Date().getFullYear()}-${String(orderCount + 1).padStart(6, "0")}`;
+
+    let paymentReference = input.paymentReference?.trim() || null;
+    let paymentStatus = input.paymentStatus ?? (input.paymentReference ? PaymentStatus.SUCCESS : PaymentStatus.PENDING);
+
+    if (input.paymentProvider === "RAZORPAY" && !input.paymentReference) {
+      const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = env;
+      if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
+        try {
+          const rzOrder = await createRazorpayOrder(totalAmount, orderNumber);
+          paymentReference = rzOrder.id;
+          paymentStatus = PaymentStatus.PENDING;
+        } catch (error) {
+          console.error("Failed to create Razorpay Delivery Order, falling back to simulated payment reference:", error);
+          paymentReference = `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+        }
+      } else {
+        paymentReference = `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      }
+    }
+
     const order = await prisma.$transaction(async (tx) => {
       for (const inputItem of input.items) {
         const updated = await tx.deliveryItem.updateMany({
@@ -166,17 +190,14 @@ class DeliveryService {
         }
       }
 
-      const orderCount = await tx.deliveryOrder.count();
-      const orderNumber = `ORD-${new Date().getFullYear()}-${String(orderCount + 1).padStart(6, "0")}`;
-
       const orderData = {
         orderNumber,
         userId,
         items: orderItems as Prisma.InputJsonValue,
         totalAmount,
         paymentProvider: input.paymentProvider?.trim() || "SIMULATED",
-        paymentReference: input.paymentReference?.trim() || null,
-        paymentStatus: input.paymentStatus ?? (input.paymentReference ? PaymentStatus.SUCCESS : PaymentStatus.PENDING),
+        paymentReference,
+        paymentStatus,
         status: DeliveryOrderStatus.PENDING,
         deliveryAddress: input.deliveryAddress.trim(),
         customerPhone,
@@ -192,16 +213,100 @@ class DeliveryService {
       });
     });
 
-    notifyAdminNewDeliveryOrder({
-      orderNumber: order.orderNumber,
-      customerName: user.name ?? 'Guest',
-      customerPhone: user.phone ?? customerPhone,
-      itemSummary: `${input.items.length} items`,
-      totalAmount: totalAmount,
-      address: input.deliveryAddress
-    });
+    if (order.paymentStatus === PaymentStatus.SUCCESS) {
+      notifyAdminNewDeliveryOrder({
+        orderNumber: order.orderNumber,
+        customerName: user.name ?? 'Guest',
+        customerPhone: user.phone ?? customerPhone,
+        itemSummary: `${input.items.length} items`,
+        totalAmount: totalAmount,
+        address: input.deliveryAddress
+      });
+    }
 
     return { message: "Delivery order placed", order: this.serializeOrder(order, "user") };
+  }
+
+  async confirmDeliveryPayment(
+    userId: string,
+    input: {
+      orderId: string;
+      success: boolean;
+      paymentReference?: string;
+      razorpayPaymentId?: string;
+      razorpayOrderId?: string;
+      razorpaySignature?: string;
+    }
+  ) {
+    const order = await prisma.deliveryOrder.findFirst({
+      where: {
+        id: input.orderId,
+        userId
+      }
+    });
+
+    if (!order) {
+      throw new AppError(404, "Delivery order not found.");
+    }
+
+    if (order.paymentStatus === PaymentStatus.SUCCESS) {
+      return {
+        message: "Order payment already confirmed.",
+        order: this.serializeOrder(order, "user")
+      };
+    }
+
+    if (input.success && order.paymentReference?.startsWith("order_")) {
+      const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = input;
+      if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+        throw new AppError(400, "Missing Razorpay verification credentials.");
+      }
+
+      const { RAZORPAY_KEY_SECRET } = env;
+      if (!RAZORPAY_KEY_SECRET) {
+        throw new AppError(500, "Razorpay secret key is not configured on the server.");
+      }
+
+      if (order.paymentReference !== razorpayOrderId) {
+        throw new AppError(400, "Order ID mismatch.");
+      }
+
+      const expectedSignature = crypto
+        .createHmac("sha256", RAZORPAY_KEY_SECRET)
+        .update(razorpayOrderId + "|" + razorpayPaymentId)
+        .digest("hex");
+
+      if (expectedSignature !== razorpaySignature) {
+        throw new AppError(400, "Payment verification failed - signature mismatch.");
+      }
+    }
+
+    const updated = await prisma.deliveryOrder.update({
+      where: { id: order.id },
+      data: {
+        paymentStatus: input.success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED,
+        paymentReference: input.razorpayPaymentId ?? input.paymentReference ?? order.paymentReference
+      },
+      include: deliveryOrderInclude
+    });
+
+    if (input.success) {
+      notifyAdminNewDeliveryOrder({
+        orderNumber: updated.orderNumber,
+        customerName: updated.user?.name ?? 'Guest',
+        customerPhone: updated.customerPhone,
+        itemSummary: `${(updated.items as any[]).length} items`,
+        totalAmount: updated.totalAmount,
+        address: updated.deliveryAddress
+      });
+    }
+
+    return {
+      message: input.success
+        ? "Payment successful and delivery order accepted."
+        : "Payment failed, order not accepted.",
+      order: this.serializeOrder(updated, "user")
+    };
   }
 
   async getMyOrders(userId: string) {

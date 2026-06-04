@@ -4,6 +4,7 @@ import {
   acceptDeliveryOrderController,
   createKitchenDeliveryItemController,
   createDeliveryOrderController,
+  confirmDeliveryPaymentController,
   createDeliveryPartnerController,
   getAvailableDeliveryPartnersController,
   getAvailableDeliveryOrdersForPartnerController,
@@ -47,6 +48,7 @@ router.get("/items", getDeliveryItemsController);
 router.get("/contact", getDeliveryContactController);
 
 router.post("/orders", authMiddleware, createDeliveryOrderController);
+router.post("/orders/confirm", authMiddleware, confirmDeliveryPaymentController);
 router.get("/orders/available-for-partner", getAvailableDeliveryOrdersForPartnerController);
 router.get("/orders/my", authMiddleware, getMyDeliveryOrdersController);
 router.get("/orders/:id", authMiddleware, getDeliveryOrderController);
