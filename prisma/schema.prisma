@@ -181,8 +181,6 @@ model DeliveryOrder {
   id               String              @id @default(cuid())
   userId           String
   items            Json
-  itemsSubtotal    Int                 @default(0)
-  deliveryFee      Int                 @default(0)
   totalAmount      Int
   status           DeliveryOrderStatus @default(PENDING)
   deliveryAddress  String
@@ -201,6 +199,8 @@ model DeliveryOrder {
   isPayoutCleared  Boolean             @default(false)
   partnerCut       Int                 @default(50)
   payoutReference  String?
+  deliveryFee      Int                 @default(0)
+  itemsSubtotal    Int                 @default(0)
   partner          DeliveryPartner?    @relation(fields: [partnerId], references: [id])
   user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -239,6 +239,21 @@ model DeliveryPartner {
   @@index([isAvailable])
   @@index([currentOrderId])
   @@index([profileStatus])
+}
+
+model DeliveryConfig {
+  id                    String   @id @default("default")
+  baseDeliveryFee       Int      @default(30)
+  deliveryFeePerKm      Int      @default(15)
+  freeDeliveryThreshold Int      @default(500)
+  defaultRiderCut       Int      @default(50)
+  updatedAt             DateTime @updatedAt
+}
+
+model KitchenDevice {
+  pushToken String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum OtpPurpose {
@@ -299,19 +314,4 @@ enum DeliveryOrderStatus {
   OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
-}
-
-model DeliveryConfig {
-  id                    String   @id @default("default")
-  baseDeliveryFee       Int      @default(30)
-  deliveryFeePerKm      Int      @default(15)
-  freeDeliveryThreshold Int      @default(500)
-  defaultRiderCut       Int      @default(50)
-  updatedAt             DateTime @updatedAt
-}
-
-model KitchenDevice {
-  pushToken String   @id
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
