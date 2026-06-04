@@ -11,6 +11,7 @@ import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { env } from "../config/env";
 import { normalizePhone, otpService } from "./otp.service";
+import { logger } from "../utils/logger";
 
 type SessionMeta = {
   userAgent?: string;
@@ -114,7 +115,13 @@ class AuthService {
   }
 
   async authenticateWithFirebase(idToken: string, meta: SessionMeta) {
-    const decoded = await firebaseAuth.verifyIdToken(idToken);
+    let decoded;
+    try {
+      decoded = await firebaseAuth.verifyIdToken(idToken);
+    } catch (error: any) {
+      logger.error("Firebase token verification failed", { error });
+      throw new AppError(401, `Firebase token verification failed: ${error.message || "Invalid token"}`);
+    }
     const firebaseUid = decoded.uid;
     const email = decoded.email?.toLowerCase();
     const emailVerified = decoded.email_verified;

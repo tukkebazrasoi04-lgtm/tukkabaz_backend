@@ -38,7 +38,9 @@ const envSchema = z.object({
   FAST2SMS_API_KEY: z.string().min(1).optional(),
   FAST2SMS_SENDER_ID: z.string().min(1).optional(),
   OTP_DEV_MODE: booleanString.default(false),
-  KITCHEN_PHONE_NUMBER: z.string().min(7).optional()
+  KITCHEN_PHONE_NUMBER: z.string().min(7).optional(),
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_CHAT_ID: z.string().min(1).optional()
 });
 
 const parsed = envSchema.safeParse(process.env);

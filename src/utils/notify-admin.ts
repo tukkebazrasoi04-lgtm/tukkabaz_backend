@@ -1,17 +1,14 @@
 import { env } from "../config/env";
 import { logger } from "./logger";
+import { prisma } from "../lib/prisma";
+import { sendPushNotifications } from "./expo-push";
 
 /**
- * Sends a WhatsApp notification to the admin phone number using the
- * Meta WhatsApp Cloud API (https://developers.facebook.com/docs/whatsapp/cloud-api).
+ * Sends admin notifications via TWO channels (both fire-and-forget):
+ *  1. Telegram Bot API (if TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID are set)
+ *  2. Expo Push Notifications to all ADMIN users who have a pushToken
  *
- * Required env vars:
- *  - ADMIN_WHATSAPP_PHONE  → Admin's WhatsApp number in international format (e.g. 919876543210)
- *  - WHATSAPP_PHONE_ID     → WhatsApp Business Phone Number ID from Meta dashboard
- *  - WHATSAPP_ACCESS_TOKEN → Permanent/system-user access token from Meta dashboard
- *
- * If any of the above are missing, the notification is silently skipped so the
- * rest of the app continues to work without WhatsApp configured.
+ * Never throws — failures are only logged so they don't break business flows.
  */
 
 interface AdminNotifyPayload {
@@ -21,50 +18,66 @@ interface AdminNotifyPayload {
   body: string;
 }
 
-const WHATSAPP_API_VERSION = "v21.0";
+async function sendTelegram(title: string, body: string): Promise<void> {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  const chatId = env.TELEGRAM_CHAT_ID;
 
-/**
- * Fire-and-forget WhatsApp notification to the admin.
- * Never throws — failures are only logged so they don't break business flows.
- */
-export async function notifyAdmin({ title, body }: AdminNotifyPayload): Promise<void> {
-  const adminPhone = (env as Record<string, unknown>).ADMIN_WHATSAPP_PHONE as string | undefined;
-  const phoneId = (env as Record<string, unknown>).WHATSAPP_PHONE_ID as string | undefined;
-  const token = (env as Record<string, unknown>).WHATSAPP_ACCESS_TOKEN as string | undefined;
-
-  if (!adminPhone || !phoneId || !token) {
-    // WhatsApp not configured — skip silently
-    logger.debug(`[notifyAdmin] skipped (WhatsApp not configured): ${title}`);
+  if (!token || !chatId) {
+    logger.debug(`[notifyAdmin] skipped Telegram (not configured): ${title}`);
     return;
   }
 
   const message = `*${title}*\n\n${body}\n\n_Sent by Tukkabaz System_`;
 
   try {
-    const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${phoneId}/messages`;
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to: adminPhone,
-        type: "text",
-        text: { body: message },
+        chat_id: chatId,
+        text: message,
+        parse_mode: "Markdown",
       }),
     });
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "unknown");
-      logger.warn(`[notifyAdmin] WhatsApp API returned ${response.status}: ${errorBody}`);
+      logger.warn(`[notifyAdmin] Telegram API returned ${response.status}: ${errorBody}`);
     } else {
-      logger.info(`[notifyAdmin] WhatsApp sent: ${title}`);
+      logger.info(`[notifyAdmin] Telegram sent: ${title}`);
     }
   } catch (error) {
-    logger.warn(`[notifyAdmin] WhatsApp send failed: ${error instanceof Error ? error.message : String(error)}`);
+    logger.warn(`[notifyAdmin] Telegram send failed: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+async function sendAdminPush(title: string, body: string): Promise<void> {
+  try {
+    const admins = await prisma.user.findMany({
+      where: { role: "ADMIN", pushToken: { not: null } },
+      select: { pushToken: true }
+    });
+
+    const tokens = admins.map(a => a.pushToken as string).filter(t => t);
+    if (tokens.length === 0) {
+      logger.debug(`[notifyAdmin] no admin push tokens found`);
+      return;
+    }
+
+    await sendPushNotifications(tokens, title, body);
+    logger.info(`[notifyAdmin] Push sent to ${tokens.length} admin(s): ${title}`);
+  } catch (error) {
+    logger.warn(`[notifyAdmin] Push send failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+export async function notifyAdmin({ title, body }: AdminNotifyPayload): Promise<void> {
+  // Fire both channels in parallel — neither blocks the other
+  await Promise.allSettled([
+    sendTelegram(title, body),
+    sendAdminPush(title, body)
+  ]);
 }
 
 // ─── Convenience helpers for common events ──────────────────────────────────

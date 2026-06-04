@@ -34,7 +34,9 @@ import {
   updatePartnerUpiController,
   requestPartnerPayoutController,
   loginDeliveryPartnerController,
-  updatePartnerPushTokenController
+  updatePartnerPushTokenController,
+  requestPartnerPasswordResetController,
+  resetPartnerPasswordController
 } from "../controllers/delivery.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 
@@ -56,6 +58,8 @@ router.patch("/orders/:id/delivered", markDeliveryDoneController);
 
 router.post("/partners", createDeliveryPartnerController);
 router.post("/partners/login", loginDeliveryPartnerController);
+router.post("/partners/password/forgot", requestPartnerPasswordResetController);
+router.post("/partners/password/reset", resetPartnerPasswordController);
 router.post("/partners/request-otp", requestDeliveryPartnerOtpController);
 router.post("/partners/verify-otp", verifyDeliveryPartnerOtpController);
 router.get("/partners/available", authMiddleware, getAvailableDeliveryPartnersController);

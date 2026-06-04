@@ -246,3 +246,30 @@ export const adminClearPartnerPayoutController = async (
     next(error);
   }
 };
+
+export const adminUpdatePushTokenController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+
+    const { pushToken } = req.body;
+    if (!pushToken || typeof pushToken !== "string") {
+      throw new AppError(400, "Valid pushToken is required");
+    }
+
+    const { prisma } = await import("../lib/prisma");
+    await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { pushToken }
+    });
+
+    sendSuccess(res, { message: "Push token updated" });
+  } catch (error) {
+    next(error);
+  }
+};

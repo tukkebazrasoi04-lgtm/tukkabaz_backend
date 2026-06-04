@@ -272,25 +272,40 @@ class DeliveryService {
   async requestPartnerOtp(input: { name?: string; phone: string; vehicleType?: string }) {
     const phone = normalizePhone(input.phone);
 
-    const partner = await prisma.deliveryPartner.upsert({
+    let partner = await prisma.deliveryPartner.findFirst({
       where: { phone },
-      update: {
-        name: input.name?.trim() || undefined,
-        vehicleType: input.vehicleType?.trim() || undefined
-      },
-      create: {
-        name: input.name?.trim() || "Delivery Partner",
-        phone,
-        vehicleType: input.vehicleType?.trim() || "Bike"
-      }
+      orderBy: { updatedAt: 'desc' }
     });
+
+    if (partner) {
+      if (input.name?.trim() || input.vehicleType?.trim()) {
+        partner = await prisma.deliveryPartner.update({
+          where: { id: partner.id },
+          data: {
+            name: input.name?.trim() || undefined,
+            vehicleType: input.vehicleType?.trim() || undefined
+          }
+        });
+      }
+    } else {
+      partner = await prisma.deliveryPartner.create({
+        data: {
+          name: input.name?.trim() || "Delivery Partner",
+          phone,
+          vehicleType: input.vehicleType?.trim() || "Bike"
+        }
+      });
+    }
 
     return { message: "Delivery partner logged in", partnerId: partner.id, partner };
   }
 
   async verifyPartnerOtp(phone: string, _otp?: string) {
     const normalizedPhone = normalizePhone(phone);
-    const partner = await prisma.deliveryPartner.findUnique({ where: { phone: normalizedPhone } });
+    const partner = await prisma.deliveryPartner.findFirst({ 
+      where: { phone: normalizedPhone },
+      orderBy: { updatedAt: 'desc' }
+    });
     if (!partner) {
       throw new AppError(404, "Delivery partner not found.");
     }
@@ -642,6 +657,21 @@ class DeliveryService {
     }
 
     const newStatus = decision === "APPROVED" ? "APPROVED" : "REJECTED";
+
+    if (newStatus === "APPROVED") {
+      const existingApproved = await prisma.deliveryPartner.findFirst({
+        where: { phone: partner.phone, profileStatus: "APPROVED", id: { not: partnerId } }
+      });
+      if (existingApproved) {
+        throw new AppError(400, "Another partner is already approved with this phone number.");
+      }
+
+      await prisma.deliveryPartner.updateMany({
+        where: { phone: partner.phone, id: { not: partnerId } },
+        data: { profileStatus: "REJECTED" }
+      });
+    }
+
     const updated = await prisma.deliveryPartner.update({
       where: { id: partnerId },
       data: { profileStatus: newStatus }

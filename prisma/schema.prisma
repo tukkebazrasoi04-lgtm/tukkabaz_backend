@@ -21,6 +21,7 @@ model User {
   phone           String?         @unique
   phoneVerifiedAt DateTime?
   deliveryAddress String?
+  pushToken       String?
   bookings        Booking[]
   deliveryOrders  DeliveryOrder[]
   roomReviews     RoomReview[]
@@ -207,7 +208,7 @@ model DeliveryOrder {
 model DeliveryPartner {
   id                String               @id @default(cuid())
   name              String
-  phone             String               @unique
+  phone             String
   vehicleType       String
   isAvailable       Boolean              @default(true)
   currentOrderId    String?
@@ -224,6 +225,7 @@ model DeliveryPartner {
   pushToken         String?
   orders            DeliveryOrder[]
 
+  @@index([phone])
   @@index([isAvailable])
   @@index([currentOrderId])
   @@index([profileStatus])

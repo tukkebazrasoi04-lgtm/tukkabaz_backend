@@ -22,9 +22,12 @@ import {
   partnerVerifySchema,
   loginDeliveryPartnerSchema,
   updatePushTokenSchema,
+  partnerPasswordResetRequestSchema,
+  partnerPasswordResetSchema
 } from "../validators/delivery.validator";
 import bcrypt from "bcrypt";
 import { prisma } from "../lib/prisma";
+import { otpService } from "../services/otp.service";
 
 export const getDeliveryItemsController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -128,6 +131,13 @@ export const createDeliveryPartnerController = async (req: Request, res: Respons
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    const existingApproved = await prisma.deliveryPartner.findFirst({
+      where: { phone: phone.trim(), profileStatus: "APPROVED" }
+    });
+    if (existingApproved) {
+      throw new AppError(409, "Phone number is already registered and verified");
+    }
+
     try {
       const partner = await prisma.deliveryPartner.create({
         data: {
@@ -162,9 +172,16 @@ export const loginDeliveryPartnerController = async (req: Request, res: Response
 
     const { phone, password } = parsed.data;
 
-    const partner = await prisma.deliveryPartner.findUnique({
-      where: { phone: phone.trim() }
+    let partner = await prisma.deliveryPartner.findFirst({
+      where: { phone: phone.trim(), profileStatus: "APPROVED" }
     });
+
+    if (!partner) {
+      partner = await prisma.deliveryPartner.findFirst({
+        where: { phone: phone.trim() },
+        orderBy: { updatedAt: "desc" }
+      });
+    }
 
     if (!partner || !partner.password) {
       throw new AppError(401, "Invalid phone or password");
@@ -644,6 +661,63 @@ export const updatePartnerPushTokenController = async (req: Request, res: Respon
     });
 
     sendSuccess(res, { message: "Push token updated", partner });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const requestPartnerPasswordResetController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const parsed = partnerPasswordResetRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid request", parsed.error.flatten());
+    }
+
+    const { phone } = parsed.data;
+    const partner = await prisma.deliveryPartner.findFirst({
+      where: { phone: phone.trim() },
+      orderBy: { updatedAt: "desc" }
+    });
+
+    if (!partner) {
+      throw new AppError(404, "Phone number not registered.");
+    }
+
+    const response = await otpService.requestOtp(phone, "PASSWORD_RESET", "Partner Password Reset");
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetPartnerPasswordController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const parsed = partnerPasswordResetSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid request", parsed.error.flatten());
+    }
+
+    const { phone, otp, newPassword } = parsed.data;
+
+    // Verify OTP first
+    await otpService.verifyOtp(phone, "PASSWORD_RESET", otp);
+
+    const partner = await prisma.deliveryPartner.findFirst({
+      where: { phone: phone.trim() },
+      orderBy: { updatedAt: "desc" }
+    });
+
+    if (!partner) {
+      throw new AppError(404, "Delivery partner not found.");
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.deliveryPartner.updateMany({
+      where: { phone: phone.trim() },
+      data: { password: hashedPassword }
+    });
+
+    sendSuccess(res, { message: "Password reset successful" });
   } catch (error) {
     next(error);
   }

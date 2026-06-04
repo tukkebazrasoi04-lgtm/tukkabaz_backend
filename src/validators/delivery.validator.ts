@@ -116,6 +116,16 @@ export const updatePushTokenSchema = z.object({
   pushToken: z.string().min(1)
 });
 
+export const partnerPasswordResetRequestSchema = z.object({
+  phone: z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits")
+});
+
+export const partnerPasswordResetSchema = z.object({
+  phone: z.string().regex(/^\d{10}$/, "Phone must be exactly 10 digits"),
+  otp: z.string().min(4).max(8),
+  newPassword: z.string().min(6, "Password must be at least 6 characters")
+});
+
 export type CreateDeliveryOrderInput = z.infer<typeof createDeliveryOrderSchema>;
 export type CreateDeliveryPartnerInput = z.infer<typeof createDeliveryPartnerSchema>;
 export type DeliveryItemPayloadInput = z.infer<typeof deliveryItemPayloadSchema>;
