@@ -326,6 +326,22 @@ class DeliveryService {
         totalAmount: updated.totalAmount,
         address: updated.deliveryAddress
       });
+
+      try {
+        const devices = await prisma.kitchenDevice.findMany({ select: { pushToken: true } });
+        const tokens = devices.map(d => d.pushToken);
+        if (tokens.length > 0) {
+          await sendPushNotifications(
+            tokens,
+            "URGENT: New Order!",
+            `Order ${updated.orderNumber} is waiting to be prepared!`,
+            { orderId: updated.id },
+            'high-priority-orders'
+          );
+        }
+      } catch (e) {
+        console.error("Failed to send instant kitchen alert", e);
+      }
     }
 
     return {

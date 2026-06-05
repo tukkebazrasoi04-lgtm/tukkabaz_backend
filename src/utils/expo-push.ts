@@ -3,9 +3,9 @@ import { logger } from './logger';
 
 const expo = new Expo();
 
-export const sendPushNotifications = async (tokens: string[], title: string, body: string, data?: any, channelId?: string) => {
+export const sendPushNotifications = async (tokens: string[], title: string, body: string, data?: Record<string, string | number | boolean>, channelId?: string) => {
   const messages: ExpoPushMessage[] = [];
-  
+
   for (let pushToken of tokens) {
     if (!Expo.isExpoPushToken(pushToken)) {
       logger.error(`Push token ${pushToken} is not a valid Expo push token`);
@@ -16,7 +16,7 @@ export const sendPushNotifications = async (tokens: string[], title: string, bod
       sound: 'default',
       title,
       body,
-      data: data || {},
+      data: data ?? {},
       channelId,
     });
   }

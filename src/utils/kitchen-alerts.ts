@@ -2,9 +2,13 @@ import { prisma } from "../lib/prisma";
 import { sendPushNotifications } from "./expo-push";
 import { logger } from "./logger";
 
+let kitchenAlertInterval: NodeJS.Timeout | null = null;
+
 export const startKitchenAlertLoop = () => {
-  // Run every 30 seconds
-  setInterval(async () => {
+  // Prevent multiple intervals (VERY IMPORTANT)
+  if (kitchenAlertInterval) return;
+
+  kitchenAlertInterval = setInterval(async () => {
     try {
       const pendingOrders = await prisma.deliveryOrder.findMany({
         where: { status: "PENDING" },
@@ -19,18 +23,27 @@ export const startKitchenAlertLoop = () => {
 
       if (devices.length === 0) return;
 
-      const tokens = devices.map(d => d.pushToken);
-      
-      for (const order of pendingOrders) {
-        await sendPushNotifications(
-          tokens,
-          "URGENT: New Order!",
-          `Order ${order.orderNumber} is waiting to be prepared!`,
-          { orderId: order.id },
-          'high-priority-orders'
-        ).catch(e => logger.error("Failed to send kitchen alert", e));
-      }
-    } catch (error) {
+      const tokens = devices
+        .map(d => d.pushToken)
+        .filter(Boolean);
+
+      const orderList = pendingOrders
+        .map(o => `#${o.orderNumber}`)
+        .join(", ");
+
+      await sendPushNotifications(
+        tokens,
+        "URGENT: New Orders!",
+        `Pending orders: ${orderList}`,
+        {
+          orderCount: pendingOrders.length
+        },
+        "high-priority-orders"
+      ).catch((e) =>
+        logger.error("Failed to send kitchen alert", e)
+      );
+
+    } catch (error: unknown) {
       logger.error("Error in kitchen alert loop", error);
     }
   }, 30000);
