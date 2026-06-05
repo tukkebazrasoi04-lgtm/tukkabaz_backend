@@ -44,7 +44,9 @@ export const startKitchenAlertLoop = () => {
       );
 
     } catch (error: unknown) {
-      logger.error("Error in kitchen alert loop", error);
-    }
+  logger.error("Error in kitchen alert loop", {
+    error: error instanceof Error ? error.message : String(error)
+  });
+}
   }, 30000);
 };
