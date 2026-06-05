@@ -216,7 +216,7 @@ const defaultServices = [
       "https://images.unsplash.com/photo-1473968512647-3e447244af8f?auto=format&fit=crop&w=1200&q=80",
       "https://images.unsplash.com/photo-1488085061387-422e29b40080?auto=format&fit=crop&w=1200&q=80"
     ],
-    type: ServiceType.DRONE_SHOOT,
+    type: ServiceType.DRONE_VIDEOS,
     detailSections: [
       {
         title: "What you will do",
@@ -258,7 +258,7 @@ const defaultServices = [
       "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=1200&q=80",
       "https://images.unsplash.com/photo-1533240332313-0db49b439ad3?auto=format&fit=crop&w=1200&q=80"
     ],
-    type: ServiceType.TREKKING_WITH_CAMPING,
+    type: ServiceType.CAMPING,
     detailSections: [
       {
         title: "Itinerary",
