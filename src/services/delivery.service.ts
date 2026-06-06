@@ -183,15 +183,14 @@ class DeliveryService {
     if (input.paymentProvider === "RAZORPAY" && !input.paymentReference) {
       const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = env;
       if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
-        try {
-          const rzOrder = await createRazorpayOrder(totalAmount, orderNumber);
-          paymentReference = rzOrder.id;
-          paymentStatus = PaymentStatus.PENDING;
-        } catch (error) {
-          console.error("Failed to create Razorpay Delivery Order, falling back to simulated payment reference:", error);
-          paymentReference = `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-        }
+        // Production/live: require a real Razorpay order so the payment signature
+        // can be verified on confirmation. Do not fall back to an unverified
+        // simulated reference on failure.
+        const rzOrder = await createRazorpayOrder(totalAmount, orderNumber);
+        paymentReference = rzOrder.id;
+        paymentStatus = PaymentStatus.PENDING;
       } else {
+        // No keys configured (local/dev only): simulated reference, no verification.
         paymentReference = `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
       }
     }

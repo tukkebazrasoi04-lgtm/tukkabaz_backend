@@ -9,13 +9,14 @@ import { createRazorpayOrder } from "../utils/razorpay";
 async function generatePaymentReference(amount: number, receiptId: string): Promise<string> {
   const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = env;
   if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
-    try {
-      const order = await createRazorpayOrder(amount, receiptId);
-      return order.id;
-    } catch (error) {
-      console.error("Failed to create Razorpay Order, falling back to simulated payment reference:", error);
-    }
+    // Keys are configured (production/live): a real Razorpay order is required so
+    // that payment signatures can be verified on confirmation. If order creation
+    // fails we must NOT fall back to an unverified simulated reference — that
+    // would let a payment be marked successful without verification.
+    const order = await createRazorpayOrder(amount, receiptId);
+    return order.id;
   }
+  // No keys configured (local/dev only): simulated reference, no verification.
   return `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 }
 
@@ -32,6 +33,9 @@ type CreateBookingIntentInput = {
   bookedFor?: string;
   checkInDate?: string;
   checkOutDate?: string;
+  contactName?: string;
+  contactPhone?: string;
+  guests?: Array<{ name: string }>;
 };
 
 type ConfirmBookingPaymentInput = {
@@ -46,6 +50,13 @@ type ConfirmBookingPaymentInput = {
 class BookingService {
   async createBookingIntent(userId: string, input: CreateBookingIntentInput) {
     const quantity = input.quantity && input.quantity > 0 ? input.quantity : 1;
+    const contactName = input.contactName?.trim() || null;
+    const contactPhone = input.contactPhone?.trim() || null;
+    const guests = Array.isArray(input.guests)
+      ? input.guests
+          .map((guest) => ({ name: String(guest?.name ?? "").trim() }))
+          .filter((guest) => guest.name.length > 0)
+      : [];
     const checkInDate = input.checkInDate ?? input.bookedFor;
     const bookedForDate = checkInDate ? new Date(checkInDate) : null;
     const checkOutDate = input.checkOutDate ? new Date(input.checkOutDate) : null;
@@ -90,8 +101,11 @@ class BookingService {
           paymentStatus: PaymentStatus.PENDING,
           bookedFor: bookedForDate,
           checkInDate: bookedForDate,
-          checkOutDate
-        }
+          checkOutDate,
+          contactName,
+          contactPhone,
+          guests
+        } as Prisma.BookingUncheckedCreateInput
       });
 
       return {
@@ -134,7 +148,10 @@ class BookingService {
         activityOptions: selectedActivityOptions,
         bookedFor: bookedForDate,
         checkInDate: bookedForDate,
-        checkOutDate
+        checkOutDate,
+        contactName,
+        contactPhone,
+        guests
       } as Prisma.BookingUncheckedCreateInput
     });
 
@@ -212,7 +229,10 @@ class BookingService {
         amount: updated.amount,
         reference: updated.paymentReference,
         checkIn: updated.checkInDate ? updated.checkInDate.toISOString().split('T')[0] : null,
-        checkOut: updated.checkOutDate ? updated.checkOutDate.toISOString().split('T')[0] : null
+        checkOut: updated.checkOutDate ? updated.checkOutDate.toISOString().split('T')[0] : null,
+        contactName: updated.contactName,
+        contactPhone: updated.contactPhone,
+        guests: Array.isArray(updated.guests) ? (updated.guests as Array<{ name: string }>) : []
       });
     }
 

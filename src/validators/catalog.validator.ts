@@ -221,7 +221,13 @@ export const createBookingIntentSchema = z.object({
   activityOptions: serviceActivityOptionsSchema,
   bookedFor: z.string().datetime().optional(),
   checkInDate: z.string().datetime().optional(),
-  checkOutDate: z.string().datetime().optional()
+  checkOutDate: z.string().datetime().optional(),
+  contactName: z.string().trim().min(1).max(120).optional(),
+  contactPhone: z.string().trim().regex(/^\d{10}$/u, "contactPhone must be 10 digits").optional(),
+  guests: z
+    .array(z.object({ name: z.string().trim().min(1).max(120) }))
+    .max(50)
+    .optional()
 });
 
 export const confirmBookingPaymentSchema = z.object({

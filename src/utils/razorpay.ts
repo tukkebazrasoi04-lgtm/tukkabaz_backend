@@ -36,7 +36,11 @@ export async function createRazorpayOrder(amountInRupees: number, receiptId: str
     body: JSON.stringify({
       amount: amountInPaise,
       currency: "INR",
-      receipt: receiptId
+      receipt: receiptId,
+      // Auto-capture the payment as soon as it is authorized so funds are
+      // actually collected (otherwise an authorized-only payment is auto-refunded
+      // by Razorpay after a few days).
+      payment_capture: 1
     })
   });
 

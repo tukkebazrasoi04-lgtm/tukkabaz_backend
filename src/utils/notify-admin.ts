@@ -90,12 +90,20 @@ export function notifyAdminNewBooking(details: {
   reference?: string | null;
   checkIn?: string | null;
   checkOut?: string | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  guests?: Array<{ name: string }>;
 }): void {
   const lines = [
     `👤 Guest: ${details.userName}`,
     `🏷 ${details.kind === "ROOM" ? "Room" : "Experience"}: ${details.itemTitle}`,
     `💰 Amount: ₹${details.amount}`,
   ];
+  if (details.contactName) lines.push(`🙍 Contact: ${details.contactName}`);
+  if (details.contactPhone) lines.push(`📞 Phone: ${details.contactPhone}`);
+  if (details.guests && details.guests.length > 0) {
+    lines.push(`👥 Guests (${details.guests.length}): ${details.guests.map((g) => g.name).join(", ")}`);
+  }
   if (details.reference) lines.push(`🧾 Ref: ${details.reference}`);
   if (details.checkIn) lines.push(`📅 Check-in: ${details.checkIn}`);
   if (details.checkOut) lines.push(`📅 Check-out: ${details.checkOut}`);
