@@ -29,6 +29,7 @@ import {
   registerKitchenPushTokenController,
   verifyDeliveryPartnerOtpController,
   uploadPartnerDlController,
+  deletePartnerAccountController,
   getPendingPartnersController,
   getAllPartnersController,
   verifyPartnerController,
@@ -89,6 +90,7 @@ router.put("/kitchen/items/:id", updateKitchenDeliveryItemController);
 router.patch("/kitchen/items/:id", updateDeliveryItemInventoryController);
 
 router.patch("/partners/:id/dl", uploadPartnerDlController);
+router.delete("/partners/:id/account", deletePartnerAccountController);
 
 // Admin-only partner verification routes (protected in admin.routes.ts)
 router.get("/admin/partners", getAllPartnersController);

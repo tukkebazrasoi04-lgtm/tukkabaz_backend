@@ -811,6 +811,29 @@ class DeliveryService {
     return { message: "Driver's License submitted for review.", partner: updated };
   }
 
+  // Lets a partner whose application is still INCOMPLETE (no documents submitted)
+  // delete their account, freeing the email so it can be used as a customer.
+  async deletePartnerAccount(partnerId: string) {
+    const partner = await prisma.deliveryPartner.findUnique({ where: { id: partnerId } });
+    if (!partner) {
+      throw new AppError(404, "Delivery partner not found.");
+    }
+    if (partner.profileStatus !== "INCOMPLETE") {
+      throw new AppError(403, "You can't delete this account after submitting your documents. Contact support if needed.");
+    }
+
+    const userId = partner.userId;
+    await prisma.$transaction(async (tx) => {
+      // Remove the FK reference first, then the linked user (cascades sessions).
+      await tx.deliveryPartner.delete({ where: { id: partnerId } });
+      if (userId) {
+        await tx.user.delete({ where: { id: userId } });
+      }
+    });
+
+    return { message: "Delivery partner account deleted. This email is now free to use." };
+  }
+
   /** Admin: fetch all partners awaiting verification */
   async getPendingPartners() {
     const partners = await prisma.deliveryPartner.findMany({

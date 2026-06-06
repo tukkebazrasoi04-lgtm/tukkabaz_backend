@@ -551,6 +551,19 @@ export const uploadPartnerDlController = async (req: Request, res: Response, nex
   }
 };
 
+export const deletePartnerAccountController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const partnerId = req.params.id;
+    if (!partnerId) {
+      throw new AppError(400, "Partner id is required");
+    }
+    const response = await deliveryService.deletePartnerAccount(partnerId);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 /** GET /delivery/admin/partners/pending
  *  Admin: list all partners awaiting DL verification. */
 export const getPendingPartnersController = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
