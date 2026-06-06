@@ -26,6 +26,7 @@ import {
   updateDeliveryPartnerAvailabilityController,
   updateDeliveryPartnerLocationController,
   verifyKitchenOtpController,
+  kitchenLoginController,
   registerKitchenPushTokenController,
   verifyDeliveryPartnerOtpController,
   uploadPartnerDlController,
@@ -84,6 +85,7 @@ router.post("/partners/:id/request-payout", requestPartnerPayoutController);
 router.get("/kitchen/orders", getKitchenDeliveryOrdersController);
 router.post("/kitchen/request-otp", requestKitchenOtpController);
 router.post("/kitchen/verify-otp", verifyKitchenOtpController);
+router.post("/kitchen/login", kitchenLoginController);
 router.post("/kitchen/push-token", registerKitchenPushTokenController);
 router.patch("/kitchen/orders/:id/status", updateDeliveryOrderStatusController);
 router.patch("/kitchen/orders/:id/unassign-partner", unassignDeliveryPartnerController);

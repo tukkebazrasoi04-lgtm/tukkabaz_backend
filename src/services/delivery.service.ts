@@ -482,6 +482,20 @@ class DeliveryService {
     return { message: "Kitchen logged in" };
   }
 
+  // Email + password kitchen login. Credentials live in env (KITCHEN_EMAIL /
+  // KITCHEN_PASSWORD) for easy updates without touching the database.
+  async loginKitchenWithPassword(email: string, password: string) {
+    if (!env.KITCHEN_EMAIL || !env.KITCHEN_PASSWORD) {
+      throw new AppError(503, "Kitchen login is not configured. Set KITCHEN_EMAIL and KITCHEN_PASSWORD.");
+    }
+    const emailMatches = email.trim().toLowerCase() === env.KITCHEN_EMAIL.toLowerCase();
+    const passwordMatches = password === env.KITCHEN_PASSWORD;
+    if (!emailMatches || !passwordMatches) {
+      throw new AppError(401, "Invalid kitchen credentials.");
+    }
+    return { message: "Kitchen login successful" };
+  }
+
   async registerKitchenPushToken(token: string) {
     await prisma.kitchenDevice.upsert({
       where: { pushToken: token },

@@ -14,6 +14,7 @@ import {
   deliveryStatusSchema,
   kitchenOtpRequestSchema,
   kitchenOtpVerifySchema,
+  kitchenLoginSchema,
   partnerOrderActionSchema,
   partnerAvailabilitySchema,
   partnerLocationSchema,
@@ -190,6 +191,19 @@ export const verifyKitchenOtpController = async (req: Request, res: Response, ne
     }
 
     const response = await deliveryService.verifyKitchenOtp(parsed.data.phone, parsed.data.otp);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const kitchenLoginController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const parsed = kitchenLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid kitchen login body", parsed.error.flatten());
+    }
+    const response = await deliveryService.loginKitchenWithPassword(parsed.data.email, parsed.data.password);
     sendSuccess(res, response);
   } catch (error) {
     next(error);

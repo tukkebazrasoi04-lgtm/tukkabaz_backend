@@ -39,6 +39,8 @@ const envSchema = z.object({
   FAST2SMS_SENDER_ID: z.string().min(1).optional(),
   OTP_DEV_MODE: booleanString.default(false),
   KITCHEN_PHONE_NUMBER: z.string().min(7).optional(),
+  KITCHEN_EMAIL: z.string().email().optional(),
+  KITCHEN_PASSWORD: z.string().min(4).optional(),
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
   TELEGRAM_CHAT_ID: z.string().min(1).optional(),
   RAZORPAY_KEY_ID: z.string().min(1).optional(),

@@ -95,6 +95,11 @@ export const kitchenOtpVerifySchema = z.object({
   otp: z.string().min(4).max(8).optional()
 });
 
+export const kitchenLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1)
+});
+
 export const partnerOrderActionSchema = z.object({
   partnerId: z.string().min(1),
   otp: z.string().trim().min(1).max(8).optional()
