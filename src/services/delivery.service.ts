@@ -42,7 +42,9 @@ class DeliveryService {
   private serializeOrder<T extends DeliveryOrder & { partner?: unknown; user?: unknown }>(order: T, visibility: OtpVisibility) {
     return {
       ...order,
-      pickupOtp: null,
+      // The kitchen sees the pickup OTP and reads it out to the rider at pickup.
+      // (Admin board also fetches with "kitchen" visibility.)
+      pickupOtp: visibility === "kitchen" ? order.pickupOtp : null,
       // Only the customer sees the delivery OTP; they read it out to the rider,
       // who types it back in to complete the order.
       deliveryOtp: visibility === "user" ? order.deliveryOtp : null,
@@ -231,7 +233,8 @@ class DeliveryService {
         customerPhone,
         destinationLat: input.destinationLat,
         destinationLng: input.destinationLng,
-        pickupOtp: null,
+        // Pickup OTP the kitchen gives the rider to confirm pickup + start delivery.
+        pickupOtp: String(Math.floor(1000 + Math.random() * 9000)),
         // Delivery OTP the customer shares with the rider to complete the order.
         deliveryOtp: String(Math.floor(1000 + Math.random() * 9000))
       } as unknown as Prisma.DeliveryOrderUncheckedCreateInput;
@@ -722,6 +725,33 @@ class DeliveryService {
     if (order.partnerId !== partnerId) {
       throw new AppError(403, "This order is not assigned to this delivery partner.");
     }
+  }
+
+  // Rider enters the pickup OTP shown on the kitchen's order → confirms pickup
+  // and starts the delivery in one step (→ OUT_FOR_DELIVERY).
+  async pickupWithOtp(orderId: string, partnerId: string, otp?: string) {
+    const current = await prisma.deliveryOrder.findUnique({ where: { id: orderId } });
+    this.assertPartnerOrder(current, partnerId);
+    const allowed: DeliveryOrderStatus[] = [
+      DeliveryOrderStatus.ACCEPTED,
+      DeliveryOrderStatus.PREPARING,
+      DeliveryOrderStatus.READY_FOR_PICKUP,
+      DeliveryOrderStatus.PICKED_UP
+    ];
+    if (!current || !allowed.includes(current.status)) {
+      throw new AppError(400, "This order can't be picked up right now.");
+    }
+    if (current.pickupOtp && (otp ?? "").trim() !== current.pickupOtp) {
+      throw new AppError(400, "Incorrect pickup OTP. Ask the kitchen for the code shown on the order.");
+    }
+
+    const order = await prisma.deliveryOrder.update({
+      where: { id: orderId },
+      data: { status: DeliveryOrderStatus.OUT_FOR_DELIVERY },
+      include: deliveryOrderInclude
+    });
+
+    return { message: "Picked up — delivery started", order: this.serializeOrder(order, "partner") };
   }
 
   async markPickedUp(orderId: string, partnerId: string) {

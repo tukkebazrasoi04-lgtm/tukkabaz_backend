@@ -376,6 +376,23 @@ export const markDeliveryDoneController = async (req: Request, res: Response, ne
   }
 };
 
+export const pickupWithOtpController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const orderId = req.params.id;
+    if (!orderId) {
+      throw new AppError(400, "Delivery order id is required");
+    }
+    const parsed = partnerOrderActionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid pickup body", parsed.error.flatten());
+    }
+    const response = await deliveryService.pickupWithOtp(orderId, parsed.data.partnerId, parsed.data.otp);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const unassignDeliveryPartnerController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const orderId = req.params.id;

@@ -17,6 +17,7 @@ import {
   getMyDeliveryOrdersController,
   markDeliveryDoneController,
   markDeliveryPickedUpController,
+  pickupWithOtpController,
   requestKitchenOtpController,
   requestDeliveryPartnerOtpController,
   startDeliveryOrderController,
@@ -63,6 +64,7 @@ router.patch("/orders/:id/status", authMiddleware, updateDeliveryOrderStatusCont
 router.patch("/orders/:id/assign-partner", authMiddleware, assignDeliveryPartnerController);
 router.patch("/orders/:id/accept", acceptDeliveryOrderController);
 router.patch("/orders/:id/picked-up", markDeliveryPickedUpController);
+router.patch("/orders/:id/pickup-otp", pickupWithOtpController);
 router.patch("/orders/:id/start-delivery", startDeliveryOrderController);
 router.patch("/orders/:id/delivered", markDeliveryDoneController);
 
