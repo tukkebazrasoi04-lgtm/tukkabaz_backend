@@ -96,7 +96,8 @@ export const kitchenOtpVerifySchema = z.object({
 });
 
 export const partnerOrderActionSchema = z.object({
-  partnerId: z.string().min(1)
+  partnerId: z.string().min(1),
+  otp: z.string().trim().min(1).max(8).optional()
 });
 
 export const dlUploadSchema = z.object({

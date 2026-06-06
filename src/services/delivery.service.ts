@@ -39,11 +39,13 @@ const deliveryOrderInclude = {
 type OtpVisibility = "user" | "kitchen" | "admin" | "partner" | "none";
 
 class DeliveryService {
-  private serializeOrder<T extends DeliveryOrder & { partner?: unknown; user?: unknown }>(order: T, _visibility: OtpVisibility) {
+  private serializeOrder<T extends DeliveryOrder & { partner?: unknown; user?: unknown }>(order: T, visibility: OtpVisibility) {
     return {
       ...order,
       pickupOtp: null,
-      deliveryOtp: null,
+      // Only the customer sees the delivery OTP; they read it out to the rider,
+      // who types it back in to complete the order.
+      deliveryOtp: visibility === "user" ? order.deliveryOtp : null,
       kitchenPhone: env.KITCHEN_PHONE_NUMBER ?? null
     };
   }
@@ -230,7 +232,8 @@ class DeliveryService {
         destinationLat: input.destinationLat,
         destinationLng: input.destinationLng,
         pickupOtp: null,
-        deliveryOtp: null
+        // Delivery OTP the customer shares with the rider to complete the order.
+        deliveryOtp: String(Math.floor(1000 + Math.random() * 9000))
       } as unknown as Prisma.DeliveryOrderUncheckedCreateInput;
 
       return tx.deliveryOrder.create({
@@ -514,14 +517,8 @@ class DeliveryService {
     const orders = await prisma.deliveryOrder.findMany({
       where: {
         partnerId: null,
-        status: {
-          in: [
-            DeliveryOrderStatus.PENDING,
-            DeliveryOrderStatus.ACCEPTED,
-            DeliveryOrderStatus.PREPARING,
-            DeliveryOrderStatus.READY_FOR_PICKUP
-          ]
-        }
+        // Riders only see (and get buzzed for) orders the kitchen marked ready.
+        status: DeliveryOrderStatus.READY_FOR_PICKUP
       },
       include: deliveryOrderInclude,
       orderBy: { createdAt: "asc" }
@@ -635,6 +632,75 @@ class DeliveryService {
     return res;
   }
 
+  // Kitchen removes the current rider → order goes back into the ready pool so it
+  // re-broadcasts to all online riders (or the kitchen can then assign a specific one).
+  async unassignPartner(orderId: string) {
+    const current = await prisma.deliveryOrder.findUnique({ where: { id: orderId } });
+    if (!current) {
+      throw new AppError(404, "Delivery order not found.");
+    }
+    const previousPartnerId = current.partnerId;
+    const order = await prisma.deliveryOrder.update({
+      where: { id: orderId },
+      data: {
+        partnerId: null,
+        assignedAt: null,
+        status: DeliveryOrderStatus.READY_FOR_PICKUP
+      },
+      include: deliveryOrderInclude
+    });
+    if (previousPartnerId) {
+      await this.refreshPartnerCapacity(previousPartnerId);
+    }
+    return { message: "Rider removed from order.", order: this.serializeOrder(order, "kitchen") };
+  }
+
+  // Kitchen assigns a specific rider (push-assign, overriding any current rider).
+  async forceAssignPartner(orderId: string, partnerId: string) {
+    const partner = await prisma.deliveryPartner.findUnique({ where: { id: partnerId } });
+    if (!partner) {
+      throw new AppError(404, "Delivery partner not found.");
+    }
+    if (partner.profileStatus !== "APPROVED") {
+      throw new AppError(400, "This rider is not verified yet.");
+    }
+    const current = await prisma.deliveryOrder.findUnique({ where: { id: orderId } });
+    if (!current) {
+      throw new AppError(404, "Delivery order not found.");
+    }
+    if (partnerAvailableStatuses.has(current.status)) {
+      throw new AppError(400, "This order is already closed.");
+    }
+    const previousPartnerId = current.partnerId && current.partnerId !== partnerId ? current.partnerId : null;
+
+    const order = await prisma.deliveryOrder.update({
+      where: { id: orderId },
+      data: {
+        partnerId,
+        assignedAt: new Date(),
+        status: current.status === DeliveryOrderStatus.PENDING ? DeliveryOrderStatus.ACCEPTED : current.status
+      },
+      include: deliveryOrderInclude
+    });
+
+    await this.refreshPartnerCapacity(partnerId, order.id);
+    if (previousPartnerId) {
+      await this.refreshPartnerCapacity(previousPartnerId);
+    }
+
+    if (partner.pushToken) {
+      await sendPushNotifications(
+        [partner.pushToken],
+        "Order Assigned",
+        `Order ${order.orderNumber} has been assigned to you by the kitchen!`,
+        { orderId },
+        "high-priority-orders"
+      ).catch((e) => console.error("Failed to send assignment push notification", e));
+    }
+
+    return { message: "Rider assigned to order.", order: this.serializeOrder(order, "kitchen") };
+  }
+
   private assertPartnerOrder(order: DeliveryOrder | null, partnerId: string) {
     if (!order) {
       throw new AppError(404, "Delivery order not found.");
@@ -681,12 +747,17 @@ class DeliveryService {
     return { message: "Delivery route started", order: this.serializeOrder(order, "partner") };
   }
 
-  async markDelivered(orderId: string, partnerId: string) {
+  async markDelivered(orderId: string, partnerId: string, otp?: string) {
     const current = await prisma.deliveryOrder.findUnique({ where: { id: orderId } });
     this.assertPartnerOrder(current, partnerId);
     const deliveryAllowedStatuses: DeliveryOrderStatus[] = [DeliveryOrderStatus.PICKED_UP, DeliveryOrderStatus.OUT_FOR_DELIVERY];
     if (!current || !deliveryAllowedStatuses.includes(current.status)) {
       throw new AppError(400, "Start delivery before marking this order delivered.");
+    }
+
+    // The customer reads out the delivery OTP; the rider must enter it to complete.
+    if (current.deliveryOtp && (otp ?? "").trim() !== current.deliveryOtp) {
+      throw new AppError(400, "Incorrect delivery OTP. Ask the customer for the code shown on their order.");
     }
 
     const order = await prisma.deliveryOrder.update({
@@ -700,9 +771,19 @@ class DeliveryService {
   }
 
   async getKitchenOrders() {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
     const orders = await prisma.deliveryOrder.findMany({
       where: {
-        status: { notIn: [DeliveryOrderStatus.DELIVERED, DeliveryOrderStatus.CANCELLED] }
+        OR: [
+          // Active orders (anything not finished)
+          { status: { notIn: [DeliveryOrderStatus.DELIVERED, DeliveryOrderStatus.CANCELLED] } },
+          // Plus today's completed orders for the kitchen's success list
+          {
+            status: { in: [DeliveryOrderStatus.DELIVERED, DeliveryOrderStatus.CANCELLED] },
+            updatedAt: { gte: startOfToday }
+          }
+        ]
       },
       include: deliveryOrderInclude,
       orderBy: { createdAt: "asc" }

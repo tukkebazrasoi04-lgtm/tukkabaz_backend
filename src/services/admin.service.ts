@@ -616,7 +616,7 @@ class AdminService {
         phone: p.phone,
         upiId: p.upiId,
         payoutRequestedAt: p.payoutRequestedAt,
-        amount: p.orders.reduce((sum, o) => sum + o.partnerCut, 0)
+        unpaidAmount: p.orders.reduce((sum, o) => sum + o.partnerCut, 0)
       }))
     };
   }

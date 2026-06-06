@@ -355,7 +355,37 @@ export const markDeliveryDoneController = async (req: Request, res: Response, ne
       throw new AppError(400, "Invalid delivery body", parsed.error.flatten());
     }
 
-    const response = await deliveryService.markDelivered(orderId, parsed.data.partnerId);
+    const response = await deliveryService.markDelivered(orderId, parsed.data.partnerId, parsed.data.otp);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const unassignDeliveryPartnerController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const orderId = req.params.id;
+    if (!orderId) {
+      throw new AppError(400, "Delivery order id is required");
+    }
+    const response = await deliveryService.unassignPartner(orderId);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const kitchenAssignDeliveryPartnerController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const orderId = req.params.id;
+    if (!orderId) {
+      throw new AppError(400, "Delivery order id is required");
+    }
+    const parsed = assignPartnerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid assign partner body", parsed.error.flatten());
+    }
+    const response = await deliveryService.forceAssignPartner(orderId, parsed.data.partnerId);
     sendSuccess(res, response);
   } catch (error) {
     next(error);
