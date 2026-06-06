@@ -1,6 +1,22 @@
 import { BookingKind, PaymentStatus, ServiceType, DeliveryOrderStatus, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
+import { availabilityService, toUtcDate } from "./availability.service";
+
+const DEFAULT_AVAILABILITY_DAYS = 60;
+
+/** Resolve a from/to query window, defaulting to today .. today+60d. */
+const resolveWindow = (from?: string, to?: string): { from: Date; to: Date } => {
+  const start = from ? new Date(from) : new Date();
+  if (Number.isNaN(start.getTime())) {
+    throw new AppError(400, "Invalid 'from' date");
+  }
+  const end = to ? new Date(to) : new Date(start.getTime() + DEFAULT_AVAILABILITY_DAYS * 24 * 60 * 60 * 1000);
+  if (Number.isNaN(end.getTime())) {
+    throw new AppError(400, "Invalid 'to' date");
+  }
+  return { from: start, to: end };
+};
 
 type UpsertRoomInput = {
   title: string;
@@ -21,6 +37,7 @@ type UpsertRoomInput = {
   longitude?: number | null;
   googleMapUrl?: string | null;
   capacity?: number;
+  totalUnits?: number;
   available?: boolean;
 };
 
@@ -40,6 +57,7 @@ type UpsertServiceInput = {
   longitude?: number | null;
   ctaLabel?: string | null;
   googleMapUrl?: string | null;
+  totalUnits?: number;
   available?: boolean;
 };
 
@@ -180,6 +198,7 @@ class AdminService {
         longitude: longitude ?? null,
         googleMapUrl: googleMapUrl ?? null,
         capacity: input.capacity ?? 2,
+        totalUnits: input.totalUnits ?? 1,
         available: input.available ?? true
       } as Prisma.RoomUncheckedCreateInput
     });
@@ -240,6 +259,7 @@ class AdminService {
         longitude: longitude === undefined ? existing.longitude : longitude,
         googleMapUrl: googleMapUrl === undefined ? (existing as any).googleMapUrl : googleMapUrl,
         capacity: input.capacity ?? existing.capacity,
+        totalUnits: input.totalUnits ?? (existing as any).totalUnits,
         available: input.available ?? existing.available
       } as Prisma.RoomUncheckedUpdateInput
     });
@@ -285,6 +305,7 @@ class AdminService {
         longitude: longitude ?? null,
         ctaLabel: ctaLabel ?? null,
         googleMapUrl: googleMapUrl ?? null,
+        totalUnits: input.totalUnits ?? 1,
         available: input.available ?? true
       } as Prisma.ServiceUncheckedCreateInput
     });
@@ -343,6 +364,7 @@ class AdminService {
         longitude: longitude === undefined ? existingService.longitude : longitude,
         ctaLabel: ctaLabel === undefined ? existingService.ctaLabel : ctaLabel,
         googleMapUrl: googleMapUrl === undefined ? (existingService as any).googleMapUrl : googleMapUrl,
+        totalUnits: input.totalUnits ?? (existing as any).totalUnits,
         available: input.available ?? existing.available
       } as Prisma.ServiceUncheckedUpdateInput
     });
@@ -647,6 +669,72 @@ class AdminService {
       }
     });
     return config;
+  }
+
+  // ─── Date-based availability ─────────────────────────────────────────────
+
+  async getRoomAvailabilityCalendar(roomId: string, from?: string, to?: string) {
+    const window = resolveWindow(from, to);
+    const days = await availabilityService.getRoomAvailability(roomId, window.from, window.to);
+    return { days };
+  }
+
+  async getServiceAvailabilityCalendar(serviceId: string, from?: string, to?: string) {
+    const window = resolveWindow(from, to);
+    const days = await availabilityService.getServiceAvailability(serviceId, window.from, window.to);
+    return { days };
+  }
+
+  async setRoomAvailabilityOverride(roomId: string, dateInput: string, units: number, note?: string) {
+    const room = await prisma.room.findUnique({ where: { id: roomId }, select: { id: true } });
+    if (!room) {
+      throw new AppError(404, "Room not found");
+    }
+    const date = toUtcDate(new Date(dateInput));
+    if (Number.isNaN(date.getTime())) {
+      throw new AppError(400, "Invalid date");
+    }
+    const override = await prisma.availabilityOverride.upsert({
+      where: { roomId_date: { roomId, date } },
+      update: { units, note: note ?? null },
+      create: { roomId, date, units, note: note ?? null }
+    });
+    return { message: "Room availability updated", override };
+  }
+
+  async clearRoomAvailabilityOverride(roomId: string, dateInput: string) {
+    const date = toUtcDate(new Date(dateInput));
+    if (Number.isNaN(date.getTime())) {
+      throw new AppError(400, "Invalid date");
+    }
+    await prisma.availabilityOverride.deleteMany({ where: { roomId, date } });
+    return { message: "Room availability override cleared" };
+  }
+
+  async setServiceAvailabilityOverride(serviceId: string, dateInput: string, units: number, note?: string) {
+    const service = await prisma.service.findUnique({ where: { id: serviceId }, select: { id: true } });
+    if (!service) {
+      throw new AppError(404, "Service not found");
+    }
+    const date = toUtcDate(new Date(dateInput));
+    if (Number.isNaN(date.getTime())) {
+      throw new AppError(400, "Invalid date");
+    }
+    const override = await prisma.availabilityOverride.upsert({
+      where: { serviceId_date: { serviceId, date } },
+      update: { units, note: note ?? null },
+      create: { serviceId, date, units, note: note ?? null }
+    });
+    return { message: "Service availability updated", override };
+  }
+
+  async clearServiceAvailabilityOverride(serviceId: string, dateInput: string) {
+    const date = toUtcDate(new Date(dateInput));
+    if (Number.isNaN(date.getTime())) {
+      throw new AppError(400, "Invalid date");
+    }
+    await prisma.availabilityOverride.deleteMany({ where: { serviceId, date } });
+    return { message: "Service availability override cleared" };
   }
 }
 

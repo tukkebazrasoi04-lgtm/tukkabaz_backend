@@ -606,6 +606,8 @@ class DeliveryService {
       where: { id: orderId },
       data: {
         partnerId,
+        // Record the assignment time the first time a rider takes the order.
+        assignedAt: existingOrder.assignedAt ?? new Date(),
         status: existingOrder.status === DeliveryOrderStatus.PENDING ? DeliveryOrderStatus.ACCEPTED : existingOrder.status
       },
       include: deliveryOrderInclude

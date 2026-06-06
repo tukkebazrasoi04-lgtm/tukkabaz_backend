@@ -192,6 +192,7 @@ export const roomPayloadSchema = z.object({
   longitude: nullableCoordinateSchema(-180, 180),
   googleMapUrl: nullableUrlSchema,
   capacity: z.coerce.number().int().positive().optional(),
+  totalUnits: z.coerce.number().int().min(0).optional(),
   available: z.boolean().optional()
 });
 
@@ -211,7 +212,19 @@ export const servicePayloadSchema = z.object({
   longitude: nullableCoordinateSchema(-180, 180),
   ctaLabel: nullableStringSchema(2, 40),
   googleMapUrl: nullableUrlSchema,
+  totalUnits: z.coerce.number().int().min(0).optional(),
   available: z.boolean().optional()
+});
+
+export const availabilityOverrideSchema = z.object({
+  date: z.string().min(8),
+  units: z.coerce.number().int().min(0),
+  note: z.string().trim().max(200).optional()
+});
+
+export const availabilityQuerySchema = z.object({
+  from: z.string().min(8).optional(),
+  to: z.string().min(8).optional()
 });
 
 export const createBookingIntentSchema = z.object({
@@ -252,6 +265,7 @@ export const roomReviewPayloadSchema = z.object({
 
 export type RoomPayloadInput = z.infer<typeof roomPayloadSchema>;
 export type ServicePayloadInput = z.infer<typeof servicePayloadSchema>;
+export type AvailabilityOverrideInput = z.infer<typeof availabilityOverrideSchema>;
 export type CreateBookingIntentInput = z.infer<typeof createBookingIntentSchema>;
 export type ConfirmBookingPaymentInput = z.infer<typeof confirmBookingPaymentSchema>;
 export type UploadImageInput = z.infer<typeof uploadImageSchema>;

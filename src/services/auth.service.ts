@@ -152,12 +152,19 @@ class AuthService {
     let user = await prisma.user.findUnique({
       where: { firebaseUid }
     });
+    const userByEmail = user ? null : await prisma.user.findUnique({
+      where: { email }
+    });
+
+    // Strict account separation: a delivery-partner email cannot sign in as a customer.
+    if ((user ?? userByEmail)?.role === "DELIVERY") {
+      throw new AppError(
+        403,
+        "This email is registered as a delivery partner. Please use a different email to continue as a customer."
+      );
+    }
 
     if (!user) {
-      const userByEmail = await prisma.user.findUnique({
-        where: { email }
-      });
-
       if (userByEmail) {
         user = await prisma.user.update({
           where: { id: userByEmail.id },
@@ -638,12 +645,21 @@ class AuthService {
     let user = await prisma.user.findUnique({
       where: { firebaseUid }
     });
+    const userByEmail = user ? null : await prisma.user.findUnique({
+      where: { email }
+    });
+
+    // Strict account separation: an existing customer/admin email cannot be turned
+    // into a delivery partner. Only brand-new emails or existing partners may proceed.
+    const existingAccount = user ?? userByEmail;
+    if (existingAccount && existingAccount.role !== "DELIVERY") {
+      throw new AppError(
+        403,
+        "This email is already registered as a customer account. Please use a different email to sign up as a delivery partner."
+      );
+    }
 
     if (!user) {
-      const userByEmail = await prisma.user.findUnique({
-        where: { email }
-      });
-
       if (userByEmail) {
         user = await prisma.user.update({
           where: { id: userByEmail.id },

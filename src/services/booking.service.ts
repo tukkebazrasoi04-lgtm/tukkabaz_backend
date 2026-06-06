@@ -5,6 +5,7 @@ import { AppError } from "../middleware/error.middleware";
 import { notifyAdminNewBooking } from "../utils/notify-admin";
 import { env } from "../config/env";
 import { createRazorpayOrder } from "../utils/razorpay";
+import { availabilityService } from "./availability.service";
 
 async function generatePaymentReference(amount: number, receiptId: string): Promise<string> {
   const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = env;
@@ -86,6 +87,9 @@ class BookingService {
         throw new AppError(404, "Room not found or unavailable");
       }
 
+      // Reject up-front if any selected night is sold out.
+      await availabilityService.assertRoomAvailable(room.id, bookedForDate, checkOutDate);
+
       const amount = room.price * quantity;
       const bookingReceiptId = `rec_room_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       const paymentReference = await generatePaymentReference(amount, bookingReceiptId);
@@ -123,6 +127,12 @@ class BookingService {
 
     if (!service || !service.available) {
       throw new AppError(404, "Service not found or unavailable");
+    }
+
+    // Date-scheduled services check per-date capacity. Contact-only services
+    // booked without a date skip the inventory guard.
+    if (bookedForDate) {
+      await availabilityService.assertServiceAvailable(service.id, bookedForDate, quantity);
     }
 
     const selectedActivityOptions = (input.activityOptions ?? []).map((option) => ({
@@ -208,18 +218,58 @@ class BookingService {
       }
     }
 
-    const updated = await prisma.booking.update({
-      where: { id: booking.id },
-      data: {
-        paymentStatus: input.success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED,
-        paymentReference: input.razorpayPaymentId ?? input.paymentReference ?? booking.paymentReference
-      },
-      include: {
-        room: true,
-        service: true,
-        user: true
+    const include = { room: true, service: true, user: true } as const;
+    const nextPaymentReference = input.razorpayPaymentId ?? input.paymentReference ?? booking.paymentReference;
+
+    let updated;
+    if (input.success) {
+      // Re-validate availability atomically so two payments can't oversell the
+      // last unit. Exclude this booking's own held PENDING row from the count.
+      try {
+        updated = await prisma.$transaction(
+          async (tx) => {
+            if (booking.kind === BookingKind.ROOM && booking.roomId && booking.checkInDate && booking.checkOutDate) {
+              await availabilityService.assertRoomAvailable(
+                booking.roomId,
+                booking.checkInDate,
+                booking.checkOutDate,
+                tx,
+                booking.id
+              );
+            } else if (booking.kind === BookingKind.SERVICE && booking.serviceId && booking.bookedFor) {
+              await availabilityService.assertServiceAvailable(
+                booking.serviceId,
+                booking.bookedFor,
+                booking.quantity ?? 1,
+                tx,
+                booking.id
+              );
+            }
+
+            return tx.booking.update({
+              where: { id: booking.id },
+              data: { paymentStatus: PaymentStatus.SUCCESS, paymentReference: nextPaymentReference },
+              include
+            });
+          },
+          { isolationLevel: "Serializable" }
+        );
+      } catch (error) {
+        if (error instanceof AppError && error.statusCode === 409) {
+          // Sold out during the payment window — void the booking to release the hold.
+          await prisma.booking
+            .update({ where: { id: booking.id }, data: { paymentStatus: PaymentStatus.FAILED } })
+            .catch(() => undefined);
+        }
+        throw error;
       }
-    });
+    } else {
+      updated = await prisma.booking.update({
+        where: { id: booking.id },
+        data: { paymentStatus: PaymentStatus.FAILED, paymentReference: nextPaymentReference },
+        include
+      });
+    }
 
     if (input.success) {
       notifyAdminNewBooking({

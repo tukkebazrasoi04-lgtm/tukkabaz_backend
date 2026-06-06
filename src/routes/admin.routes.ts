@@ -14,7 +14,13 @@ import {
   adminGetPartnerPayoutsController,
   adminClearPartnerPayoutController,
   adminUpdatePushTokenController,
-  adminUpdateDeliveryConfigController
+  adminUpdateDeliveryConfigController,
+  adminGetRoomAvailabilityController,
+  adminSetRoomAvailabilityController,
+  adminClearRoomAvailabilityController,
+  adminGetServiceAvailabilityController,
+  adminSetServiceAvailabilityController,
+  adminClearServiceAvailabilityController
 } from "../controllers/admin.controller";
 import { authMiddleware, requireRoles } from "../middleware/auth.middleware";
 import { adminDeleteImageController, adminUploadMediaController } from "../controllers/media.controller";
@@ -37,11 +43,17 @@ router.get("/rooms", adminGetRoomsController);
 router.post("/rooms", adminCreateRoomController);
 router.put("/rooms/:id", adminUpdateRoomController);
 router.delete("/rooms/:id", adminDeleteRoomController);
+router.get("/rooms/:id/availability", adminGetRoomAvailabilityController);
+router.put("/rooms/:id/availability", adminSetRoomAvailabilityController);
+router.delete("/rooms/:id/availability", adminClearRoomAvailabilityController);
 router.post("/uploads/image", adminUploadImageController);
 router.get("/services", adminGetServicesController);
 router.post("/services", adminCreateServiceController);
 router.put("/services/:id", adminUpdateServiceController);
 router.delete("/services/:id", adminDeleteServiceController);
+router.get("/services/:id/availability", adminGetServiceAvailabilityController);
+router.put("/services/:id/availability", adminSetServiceAvailabilityController);
+router.delete("/services/:id/availability", adminClearServiceAvailabilityController);
 router.post("/media/upload", adminUploadMediaController);
 router.delete("/media/:public_id(.*)", adminDeleteImageController);
 

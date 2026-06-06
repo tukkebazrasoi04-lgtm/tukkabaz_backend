@@ -6,6 +6,7 @@ import { adminService } from "../services/admin.service";
 import { uploadService } from "../services/upload.service";
 import { adminLoginSchema } from "../validators/auth.validator";
 import {
+  availabilityOverrideSchema,
   roomPayloadSchema,
   servicePayloadSchema,
   uploadImageSchema
@@ -272,6 +273,136 @@ export const adminUpdatePushTokenController = async (
     });
 
     sendSuccess(res, { message: "Push token updated" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminGetRoomAvailabilityController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const roomId = req.params.id;
+    if (!roomId) {
+      throw new AppError(400, "Room id is required");
+    }
+    const response = await adminService.getRoomAvailabilityCalendar(
+      roomId,
+      req.query.from as string | undefined,
+      req.query.to as string | undefined
+    );
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminSetRoomAvailabilityController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const roomId = req.params.id;
+    if (!roomId) {
+      throw new AppError(400, "Room id is required");
+    }
+    const parsed = availabilityOverrideSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid request body", parsed.error.flatten());
+    }
+    const response = await adminService.setRoomAvailabilityOverride(
+      roomId,
+      parsed.data.date,
+      parsed.data.units,
+      parsed.data.note
+    );
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminClearRoomAvailabilityController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const roomId = req.params.id;
+    const date = req.query.date as string | undefined;
+    if (!roomId || !date) {
+      throw new AppError(400, "Room id and date are required");
+    }
+    const response = await adminService.clearRoomAvailabilityOverride(roomId, date);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminGetServiceAvailabilityController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const serviceId = req.params.id;
+    if (!serviceId) {
+      throw new AppError(400, "Service id is required");
+    }
+    const response = await adminService.getServiceAvailabilityCalendar(
+      serviceId,
+      req.query.from as string | undefined,
+      req.query.to as string | undefined
+    );
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminSetServiceAvailabilityController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const serviceId = req.params.id;
+    if (!serviceId) {
+      throw new AppError(400, "Service id is required");
+    }
+    const parsed = availabilityOverrideSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid request body", parsed.error.flatten());
+    }
+    const response = await adminService.setServiceAvailabilityOverride(
+      serviceId,
+      parsed.data.date,
+      parsed.data.units,
+      parsed.data.note
+    );
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminClearServiceAvailabilityController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const serviceId = req.params.id;
+    const date = req.query.date as string | undefined;
+    if (!serviceId || !date) {
+      throw new AppError(400, "Service id and date are required");
+    }
+    const response = await adminService.clearServiceAvailabilityOverride(serviceId, date);
+    sendSuccess(res, response);
   } catch (error) {
     next(error);
   }

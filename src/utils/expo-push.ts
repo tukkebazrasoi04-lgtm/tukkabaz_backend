@@ -18,6 +18,7 @@ export const sendPushNotifications = async (tokens: string[], title: string, bod
       body,
       data: data ?? {},
       channelId,
+      priority: 'high',
     });
   }
 
