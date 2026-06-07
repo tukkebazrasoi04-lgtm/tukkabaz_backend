@@ -65,7 +65,7 @@ async function sendAdminPush(title: string, body: string): Promise<void> {
       return;
     }
 
-    await sendPushNotifications(tokens, title, body);
+    await sendPushNotifications(tokens, title, body, undefined, "admin-bookings");
     logger.info(`[notifyAdmin] Push sent to ${tokens.length} admin(s): ${title}`);
   } catch (error) {
     logger.warn(`[notifyAdmin] Push send failed: ${error instanceof Error ? error.message : String(error)}`);
