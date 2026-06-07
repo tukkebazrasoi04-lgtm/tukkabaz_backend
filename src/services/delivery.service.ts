@@ -1104,7 +1104,7 @@ async unregisterKitchenPushToken(token: string) {
           baseDeliveryFee: 30,
           deliveryFeePerKm: 15,
           freeDeliveryThreshold: 500,
-          defaultRiderCut: 50
+          defaultRiderCut: 30
         }
       });
     }
