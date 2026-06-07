@@ -632,8 +632,6 @@ class AuthService {
     }
 
     return { message: "Logged out successfully" };
-
-    return { message: "Logged out successfully" };
   }
 
   async authenticatePartnerWithFirebase(idToken: string, meta: SessionMeta) {

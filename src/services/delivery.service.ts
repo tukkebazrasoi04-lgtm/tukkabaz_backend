@@ -494,7 +494,13 @@ class DeliveryService {
     });
     return { message: "Push token registered successfully" };
   }
-
+async unregisterKitchenPushToken(token: string) {
+    // We use deleteMany to prevent an error if the token was already deleted
+    await prisma.kitchenDevice.deleteMany({
+      where: { pushToken: token }
+    });
+    return { message: "Kitchen device unregistered successfully" };
+  }
   async getAvailablePartners() {
     const partners = await prisma.deliveryPartner.findMany({
       where: { isAvailable: true },

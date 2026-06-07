@@ -45,7 +45,8 @@ import {
   requestPartnerPasswordResetController,
   resetPartnerPasswordController,
   googleDeliveryPartnerAuthController,
-  getDeliveryConfigController
+  getDeliveryConfigController,
+  unregisterKitchenPushTokenController
 } from "../controllers/delivery.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 
@@ -96,6 +97,7 @@ router.get("/kitchen/items", getKitchenDeliveryItemsController);
 router.post("/kitchen/items", createKitchenDeliveryItemController);
 router.put("/kitchen/items/:id", updateKitchenDeliveryItemController);
 router.patch("/kitchen/items/:id", updateDeliveryItemInventoryController);
+router.post("/kitchen/push-token/remove", unregisterKitchenPushTokenController);
 
 router.patch("/partners/:id/dl", uploadPartnerDlController);
 router.delete("/partners/:id/account", deletePartnerAccountController);

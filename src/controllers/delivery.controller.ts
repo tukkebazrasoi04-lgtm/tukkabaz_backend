@@ -222,7 +222,20 @@ export const registerKitchenPushTokenController = async (req: Request, res: Resp
     next(error);
   }
 };
+export const unregisterKitchenPushTokenController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { token } = req.body;
 
+    if (!token || typeof token !== 'string') {
+      throw new AppError(400, "Valid token string is required");
+    }
+
+    const response = await deliveryService.unregisterKitchenPushToken(token);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
 export const getAvailableDeliveryPartnersController = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const partners = await prisma.deliveryPartner.findMany({
