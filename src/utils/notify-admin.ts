@@ -79,7 +79,32 @@ export async function notifyAdmin({ title, body }: AdminNotifyPayload): Promise<
     sendAdminPush(title, body)
   ]);
 }
+export async function notifyAvailableRiders(title: string, body: string): Promise<void> {
+  try {
+    // Look up all approved partners who are online and have a token registered
+    const activePartners = await prisma.deliveryPartner.findMany({
+      where: {
+        isOnline: true,
+        profileStatus: "APPROVED",
+        pushToken: { not: null }
+      },
+      select: { pushToken: true }
+    });
 
+    const tokens = activePartners.map(p => p.pushToken as string).filter(Boolean);
+
+    if (tokens.length === 0) {
+      logger.debug(`[notifyRiders] No online delivery partner tokens found`);
+      return;
+    }
+
+    // Pass the extracted tokens to your shared Expo Push utility
+    await sendPushNotifications(tokens, title, body, undefined, "high-priority-orders");
+    logger.info(`[notifyRiders] Broadcasted push to ${tokens.length} rider(s)`);
+  } catch (error) {
+    logger.warn(`[notifyRiders] Broadcast failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 // ─── Convenience helpers for common events ──────────────────────────────────
 
 export function notifyAdminNewBooking(details: {

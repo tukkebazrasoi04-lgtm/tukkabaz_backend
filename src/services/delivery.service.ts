@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
 import type { CreateDeliveryOrderInput, CreateDeliveryPartnerInput, DeliveryItemPayloadInput } from "../validators/delivery.validator";
 import { normalizePhone } from "./otp.service";
-import { notifyAdminPartnerApplication, notifyAdminNewDeliveryOrder } from "../utils/notify-admin";
+import { notifyAdminPartnerApplication, notifyAdminNewDeliveryOrder, notifyAvailableRiders } from "../utils/notify-admin";
 import { sendPushNotifications } from "../utils/expo-push";
 import { createRazorpayOrder } from "../utils/razorpay";
 
@@ -398,24 +398,11 @@ class DeliveryService {
     }
 
     if (status === DeliveryOrderStatus.READY_FOR_PICKUP) {
-      const availablePartners = await prisma.deliveryPartner.findMany({
-        where: {
-          isAvailable: true,
-          profileStatus: 'APPROVED',
-          pushToken: { not: null }
-        },
-        select: { pushToken: true }
-      });
-      const tokens = availablePartners.map(p => p.pushToken as string).filter(t => t);
-      if (tokens.length > 0) {
-        await sendPushNotifications(
-          tokens,
-          "New Delivery Order Available",
-          `Order ${order.orderNumber} is ready for pickup!`,
-          { orderId: order.id },
-          'high-priority-orders'
-        ).catch(e => console.error("Failed to send push notification", e));
-      }
+      // Trigger the broadcast helper you created in Step 3!
+      void notifyAvailableRiders(
+        "New Delivery Order Available",
+        `Order ${order.orderNumber} is ready for pickup!`
+      );
     }
 
     return { message: "Delivery order status updated", order: this.serializeOrder(order, role === "ADMIN" ? "admin" : "kitchen") };
@@ -456,7 +443,7 @@ class DeliveryService {
 
   async verifyPartnerOtp(phone: string, _otp?: string) {
     const normalizedPhone = normalizePhone(phone);
-    const partner = await prisma.deliveryPartner.findFirst({ 
+    const partner = await prisma.deliveryPartner.findFirst({
       where: { phone: normalizedPhone },
       orderBy: { updatedAt: 'desc' }
     });
@@ -975,7 +962,7 @@ class DeliveryService {
     const enrichedPartners = partners.map(partner => {
       const deliveredCount = partner.orders.length;
       const totalEarnings = partner.orders.reduce((sum, order) => sum + (order.partnerCut ?? 0), 0);
-      
+
       const { orders, ...rest } = partner;
       return {
         ...rest,
@@ -1002,7 +989,7 @@ class DeliveryService {
     const enrichedPartners = partners.map(partner => {
       const deliveredCount = partner.orders.length;
       const totalEarnings = partner.orders.reduce((sum, order) => sum + (order.partnerCut ?? 0), 0);
-      
+
       const { orders, ...rest } = partner;
       return {
         ...rest,
