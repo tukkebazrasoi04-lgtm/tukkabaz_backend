@@ -610,12 +610,28 @@ class AuthService {
       throw new AppError(404, "Session not found");
     }
 
-    if (!session.revoked) {
-      await prisma.session.update({
-        where: { id: session.id },
-        data: { revoked: true }
-      });
+   if (!session.revoked) {
+      // Run everything in a transaction to revoke the session and remove push tokens
+      await prisma.$transaction([
+        // 1. Revoke the active session
+        prisma.session.update({
+          where: { id: session.id },
+          data: { revoked: true }
+        }),
+        // 2. Clear pushToken on the User record
+        prisma.user.update({
+          where: { id: userId },
+          data: { pushToken: null }
+        }),
+        // 3. Clear pushToken on the DeliveryPartner record if they have one linked
+        prisma.deliveryPartner.updateMany({
+          where: { userId: userId },
+          data: { pushToken: null }
+        })
+      ]);
     }
+
+    return { message: "Logged out successfully" };
 
     return { message: "Logged out successfully" };
   }
