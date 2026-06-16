@@ -18,6 +18,7 @@ model User {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   passwordHash    String?
+  emailVerified   Boolean          @default(false)
   phone           String?          @unique
   phoneVerifiedAt DateTime?
   deliveryAddress String?
@@ -227,6 +228,7 @@ model DeliveryOrder {
   payoutReference  String?
   deliveryFee      Int                 @default(0)
   itemsSubtotal    Int                 @default(0)
+  stockRestored    Boolean             @default(false)
   partner          DeliveryPartner?    @relation(fields: [partnerId], references: [id])
   user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -273,6 +275,10 @@ model DeliveryConfig {
   deliveryFeePerKm      Int      @default(15)
   freeDeliveryThreshold Int      @default(500)
   defaultRiderCut       Int      @default(50)
+  kitchenLat            Float    @default(29.4727)
+  kitchenLng            Float    @default(79.6479)
+  serviceRadiusKm       Float    @default(8)
+  kitchenAddress        String?
   updatedAt             DateTime @updatedAt
 }
 
@@ -290,6 +296,7 @@ enum OtpPurpose {
   ORDER_PICKUP
   ORDER_DELIVERY
   PASSWORD_RESET
+  EMAIL_VERIFY
 }
 
 enum Role {

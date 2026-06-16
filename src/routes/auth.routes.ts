@@ -7,6 +7,8 @@ import {
   requestPasswordResetController,
   requestPhoneVerificationController,
   requestUserOtpController,
+  requestEmailVerificationController,
+  verifyEmailController,
   registerController,
   refreshTokenController,
   resetPasswordController,
@@ -23,6 +25,8 @@ router.post("/register", registerController);
 router.post("/login", loginController);
 router.post("/password/forgot", requestPasswordResetController);
 router.post("/password/reset", resetPasswordController);
+router.post("/email/verify-request", requestEmailVerificationController);
+router.post("/email/verify", verifyEmailController);
 router.post("/otp/request", requestUserOtpController);
 router.post("/otp/verify", verifyUserOtpController);
 router.post("/phone/request", authMiddleware, requestPhoneVerificationController);

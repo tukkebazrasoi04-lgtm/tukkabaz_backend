@@ -53,6 +53,8 @@ const userSelect = {
 const getDefaultName = (email: string): string => email.split("@")[0];
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 const PASSWORD_RESET_PURPOSE = "PASSWORD_RESET" as OtpPurpose;
+const EMAIL_VERIFY_PURPOSE = "EMAIL_VERIFY" as OtpPurpose;
+const EMAIL_VERIFY_LABEL = "verify your email";
 
 class AuthService {
   private async createTokensForSession(user: User, sessionId: string): Promise<AuthTokens> {
@@ -220,48 +222,99 @@ class AuthService {
     };
   }
 
-  async registerWithPassword(input: { name: string; email: string; password: string }, meta: SessionMeta) {
+  async registerWithPassword(input: { name: string; email: string; password: string }, _meta: SessionMeta) {
     const normalizedEmail = normalizeEmail(input.email);
     const existing = await prisma.user.findUnique({
       where: { email: normalizedEmail }
     });
 
     if (existing) {
-      const hasPassword = Boolean(existing.passwordHash);
-      throw new AppError(
-        409,
-        hasPassword
-          ? "An account with this email already exists. Please sign in instead."
-          : "This email is already linked with Google login. Please continue with Google."
-      );
+      // Email already used by a Google account → must continue with Google.
+      if (!existing.passwordHash) {
+        throw new AppError(409, "This email is already linked with Google login. Please continue with Google.");
+      }
+      // Already a verified password account → tell them to sign in.
+      if (existing.emailVerified) {
+        throw new AppError(409, "An account with this email already exists. Please sign in instead.");
+      }
+      // Local account exists but was never verified → refresh its details and
+      // resend the verification code so they can finish signing up.
+      const passwordHash = await bcrypt.hash(input.password, 10);
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { name: input.name.trim(), passwordHash }
+      });
+      const otpResult = await otpService.requestOtp(normalizedEmail, EMAIL_VERIFY_PURPOSE, EMAIL_VERIFY_LABEL);
+      return {
+        message: "Verify your email to finish signing up.",
+        requiresVerification: true,
+        email: normalizedEmail,
+        otp: otpResult.otp
+      };
     }
 
     const passwordHash = await bcrypt.hash(input.password, 10);
-    const user = await prisma.user.create({
+    await prisma.user.create({
       data: {
         firebaseUid: `local:${normalizedEmail}`,
         email: normalizedEmail,
         name: input.name.trim(),
-        passwordHash
+        passwordHash,
+        emailVerified: false
       }
     });
 
-    const { accessToken, refreshToken } = await this.issueSessionForUser(user, meta);
-    const safeUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: userSelect
-    });
+    const otpResult = await otpService.requestOtp(normalizedEmail, EMAIL_VERIFY_PURPOSE, EMAIL_VERIFY_LABEL);
+    return {
+      message: "Verify your email to finish signing up.",
+      requiresVerification: true,
+      email: normalizedEmail,
+      otp: otpResult.otp
+    };
+  }
 
+  // Confirm the email-verification OTP, mark the account verified, and log in.
+  async verifyEmail(input: { email: string; otp: string }, meta: SessionMeta) {
+    const normalizedEmail = normalizeEmail(input.email);
+    await otpService.verifyOtp(normalizedEmail, EMAIL_VERIFY_PURPOSE, input.otp);
+
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user || !user.passwordHash) {
+      throw new AppError(400, "Verification is not available for this account.");
+    }
+
+    if (!user.emailVerified) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerified: true }
+      });
+    }
+
+    const { accessToken, refreshToken } = await this.issueSessionForUser(user, meta);
+    const safeUser = await prisma.user.findUnique({ where: { id: user.id }, select: userSelect });
     if (!safeUser) {
       throw new AppError(404, "User not found");
     }
 
-    return {
-      message: "Registration successful",
-      user: safeUser,
-      accessToken,
-      refreshToken
-    };
+    return { message: "Email verified", user: safeUser, accessToken, refreshToken };
+  }
+
+  // Resend the email-verification code for an unverified password account.
+  async requestEmailVerification(email: string) {
+    const normalizedEmail = normalizeEmail(email);
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) {
+      throw new AppError(404, "No account exists with this email.");
+    }
+    if (!user.passwordHash) {
+      throw new AppError(400, "This email uses Google login. Please continue with Google.");
+    }
+    if (user.emailVerified) {
+      return { message: "Email already verified. Please sign in.", alreadyVerified: true };
+    }
+
+    const otpResult = await otpService.requestOtp(normalizedEmail, EMAIL_VERIFY_PURPOSE, EMAIL_VERIFY_LABEL);
+    return { message: "Verification code sent.", otp: otpResult.otp };
   }
 
   async loginWithPassword(email: string, password: string, meta: SessionMeta) {
@@ -277,6 +330,18 @@ class AuthService {
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
       throw new AppError(401, "Invalid email or password");
+    }
+
+    // Block login until the email is verified. Send a fresh code so the user can
+    // complete verification, and signal the client to show the verify step.
+    if (!user.emailVerified) {
+      await otpService
+        .requestOtp(normalizedEmail, EMAIL_VERIFY_PURPOSE, EMAIL_VERIFY_LABEL)
+        .catch(() => undefined);
+      throw new AppError(403, "Please verify your email to continue. We've sent you a new code.", {
+        code: "EMAIL_NOT_VERIFIED",
+        email: normalizedEmail
+      });
     }
 
     const { accessToken, refreshToken } = await this.issueSessionForUser(user, meta);

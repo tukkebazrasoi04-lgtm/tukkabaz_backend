@@ -174,7 +174,30 @@ class BookingService {
     };
   }
 
-  async confirmBookingPayment(userId: string, input: ConfirmBookingPaymentInput) {
+  // Webhook-driven confirmation: Razorpay reports a captured payment even if the
+  // customer's app never reached the confirm call. Signature is already verified
+  // by the webhook handler, so this confirmation is trusted.
+  async confirmPaidViaRazorpayOrder(razorpayOrderId: string, razorpayPaymentId: string) {
+    const booking = await prisma.booking.findFirst({ where: { paymentReference: razorpayOrderId } });
+    if (!booking) {
+      return null; // not a booking (could be a delivery order)
+    }
+    if (booking.paymentStatus === PaymentStatus.SUCCESS) {
+      return booking;
+    }
+    return this.confirmBookingPayment(
+      booking.userId,
+      {
+        bookingId: booking.id,
+        success: true,
+        razorpayPaymentId,
+        razorpayOrderId
+      },
+      true
+    );
+  }
+
+  async confirmBookingPayment(userId: string, input: ConfirmBookingPaymentInput, trusted = false) {
     const booking = await prisma.booking.findFirst({
       where: {
         id: input.bookingId,
@@ -193,7 +216,7 @@ class BookingService {
       };
     }
 
-    if (input.success && booking.paymentReference?.startsWith("order_")) {
+    if (!trusted && input.success && booking.paymentReference?.startsWith("order_")) {
       const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = input;
       if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
         throw new AppError(400, "Missing Razorpay verification credentials.");

@@ -26,7 +26,8 @@ import {
   updatePushTokenSchema,
   partnerPasswordResetRequestSchema,
   partnerPasswordResetSchema,
-  confirmDeliveryPaymentSchema
+  confirmDeliveryPaymentSchema,
+  updateKitchenLocationSchema
 } from "../validators/delivery.validator";
 import bcrypt from "bcrypt";
 import { normalizePhone } from "../services/otp.service";
@@ -823,6 +824,20 @@ export const confirmDeliveryPaymentController = async (req: Request, res: Respon
 export const getDeliveryConfigController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const response = await deliveryService.getDeliveryConfig();
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateKitchenLocationController = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const parsed = updateKitchenLocationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid kitchen location body", parsed.error.flatten());
+    }
+
+    const response = await deliveryService.updateKitchenLocation(parsed.data);
     sendSuccess(res, response);
   } catch (error) {
     next(error);

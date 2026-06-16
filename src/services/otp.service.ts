@@ -3,15 +3,20 @@ import { OtpPurpose } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
 import { smsService } from "./sms.service";
+import { emailService } from "./email.service";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
 const makeOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 const PASSWORD_RESET_PURPOSE = "PASSWORD_RESET" as OtpPurpose;
+const EMAIL_VERIFY_PURPOSE = "EMAIL_VERIFY" as OtpPurpose;
+
+// Email-delivered purposes are keyed by email address; everything else is SMS.
+const EMAIL_OTP_PURPOSES = new Set<OtpPurpose>([PASSWORD_RESET_PURPOSE, EMAIL_VERIFY_PURPOSE]);
 
 const isPhoneOtpPurpose = (purpose: OtpPurpose): boolean =>
-  purpose !== PASSWORD_RESET_PURPOSE;
+  !EMAIL_OTP_PURPOSES.has(purpose);
 
 const normalizeIdentifier = (identifier: string, purpose: OtpPurpose): string => {
   if (isPhoneOtpPurpose(purpose)) {
@@ -70,15 +75,21 @@ class OtpService {
       })
     ]);
 
+    // Only surface the code in the API response when it was NOT actually sent
+    // (local/dev with no provider configured). In production it is delivered out
+    // of band (SMS/email) and never returned to the caller.
+    let devSkipped = false;
     if (isPhoneOtpPurpose(purpose)) {
-      await smsService.sendOtp(normalizedIdentifier, otp, label);
+      const result = await smsService.sendOtp(normalizedIdentifier, otp, label);
+      devSkipped = result.devSkipped;
     } else {
-      console.info(`[otp:${label}] ${normalizedIdentifier} -> ${otp}`);
+      const result = await emailService.sendOtp(normalizedIdentifier, otp, label);
+      devSkipped = result.devSkipped;
     }
 
     return {
       message: "OTP sent",
-      otp: purpose === PASSWORD_RESET_PURPOSE ? otp : undefined,
+      otp: devSkipped ? otp : undefined,
       expiresAt
     };
   }

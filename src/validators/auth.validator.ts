@@ -27,6 +27,15 @@ export const passwordResetRequestSchema = z.object({
   email: z.string().email("Valid email is required")
 });
 
+export const emailVerificationRequestSchema = z.object({
+  email: z.string().email("Valid email is required")
+});
+
+export const emailVerifySchema = z.object({
+  email: z.string().email("Valid email is required"),
+  otp: z.string().min(4).max(8)
+});
+
 export const passwordResetVerifySchema = z.object({
   email: z.string().email("Valid email is required"),
   otp: z.string().min(4).max(8),

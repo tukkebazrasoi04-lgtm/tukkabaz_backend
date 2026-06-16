@@ -651,21 +651,33 @@ class AdminService {
     deliveryFeePerKm: number;
     freeDeliveryThreshold: number;
     defaultRiderCut: number;
+    kitchenLat?: number;
+    kitchenLng?: number;
+    serviceRadiusKm?: number;
+    kitchenAddress?: string;
   }) {
+    const locationFields = {
+      ...(input.kitchenLat !== undefined ? { kitchenLat: input.kitchenLat } : {}),
+      ...(input.kitchenLng !== undefined ? { kitchenLng: input.kitchenLng } : {}),
+      ...(input.serviceRadiusKm !== undefined ? { serviceRadiusKm: input.serviceRadiusKm } : {}),
+      ...(input.kitchenAddress !== undefined ? { kitchenAddress: input.kitchenAddress } : {})
+    };
     const config = await prisma.deliveryConfig.upsert({
       where: { id: "default" },
       update: {
         baseDeliveryFee: input.baseDeliveryFee,
         deliveryFeePerKm: input.deliveryFeePerKm,
         freeDeliveryThreshold: input.freeDeliveryThreshold,
-        defaultRiderCut: input.defaultRiderCut
+        defaultRiderCut: input.defaultRiderCut,
+        ...locationFields
       },
       create: {
         id: "default",
         baseDeliveryFee: input.baseDeliveryFee,
         deliveryFeePerKm: input.deliveryFeePerKm,
         freeDeliveryThreshold: input.freeDeliveryThreshold,
-        defaultRiderCut: input.defaultRiderCut
+        defaultRiderCut: input.defaultRiderCut,
+        ...locationFields
       }
     });
     return config;

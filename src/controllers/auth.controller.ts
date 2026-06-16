@@ -6,6 +6,8 @@ import {
   logoutSchema,
   passwordResetRequestSchema,
   passwordResetVerifySchema,
+  emailVerificationRequestSchema,
+  emailVerifySchema,
   phoneVerificationRequestSchema,
   phoneVerificationVerifySchema,
   registerSchema,
@@ -112,6 +114,46 @@ export const resetPasswordController = async (
     }
 
     const response = await authService.resetPassword(parsed.data);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const requestEmailVerificationController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const parsed = emailVerificationRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid email verification body", parsed.error.flatten());
+    }
+
+    const response = await authService.requestEmailVerification(parsed.data.email);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyEmailController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const parsed = emailVerifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid email verification body", parsed.error.flatten());
+    }
+
+    const response = await authService.verifyEmail(parsed.data, {
+      userAgent: req.get("user-agent") || undefined,
+      ipAddress: req.ip
+    });
+
     sendSuccess(res, response);
   } catch (error) {
     next(error);
