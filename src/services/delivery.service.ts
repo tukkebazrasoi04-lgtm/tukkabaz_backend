@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { env } from "../config/env";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../middleware/error.middleware";
-import type { CreateDeliveryOrderInput, CreateDeliveryPartnerInput, DeliveryItemPayloadInput } from "../validators/delivery.validator";
+import type { CreateDeliveryOrderInput, CreateDeliveryPartnerInput, DeliveryItemPayloadInput, UpdateKitchenLocationInput } from "../validators/delivery.validator";
 import { normalizePhone } from "./otp.service";
 import { notifyAdminPartnerApplication, notifyAdminNewDeliveryOrder, notifyAvailableRiders } from "../utils/notify-admin";
 import { sendPushNotifications } from "../utils/expo-push";
@@ -22,8 +22,6 @@ const activePartnerStatuses: DeliveryOrderStatus[] = [
   DeliveryOrderStatus.PICKED_UP,
   DeliveryOrderStatus.OUT_FOR_DELIVERY
 ];
-
-const MUKTESHWAR_PATTERN = /mukteshwar/i;
 
 const deliveryOrderInclude = {
   partner: true,
@@ -87,8 +85,20 @@ class DeliveryService {
       throw new AppError(409, "This phone number is reserved for kitchen operations.");
     }
 
-    if (!MUKTESHWAR_PATTERN.test(input.deliveryAddress)) {
-      throw new AppError(400, "Delivery is currently available only in Mukteshwar.");
+    // Serviceability is decided on coordinates (like Zomato/Blinkit), not on the
+    // address text. The map pin must fall within the kitchen's delivery radius.
+    const config = await this.getDeliveryConfig();
+    if (input.destinationLat === undefined || input.destinationLng === undefined) {
+      throw new AppError(400, "Please pick your delivery location on the map.");
+    }
+    const serviceDistanceKm = this.calculateHaversineDistance(
+      config.kitchenLat,
+      config.kitchenLng,
+      input.destinationLat,
+      input.destinationLng
+    );
+    if (serviceDistanceKm > config.serviceRadiusKm) {
+      throw new AppError(400, "Sorry, we don't deliver to this location yet.");
     }
 
     if (user.phone !== customerPhone || !user.phoneVerifiedAt) {
@@ -152,27 +162,14 @@ class DeliveryService {
       };
     });
 
-    const config = await this.getDeliveryConfig();
     const itemsSubtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
 
     let deliveryFee = 0;
     if (itemsSubtotal < config.freeDeliveryThreshold) {
-      if (input.destinationLat !== undefined && input.destinationLng !== undefined) {
-        const KITCHEN_LAT = 29.4727;
-        const KITCHEN_LNG = 79.6479;
-        const distance = this.calculateHaversineDistance(
-          KITCHEN_LAT,
-          KITCHEN_LNG,
-          input.destinationLat,
-          input.destinationLng
-        );
-        deliveryFee = Math.max(
-          config.baseDeliveryFee,
-          Math.round(config.baseDeliveryFee + distance * config.deliveryFeePerKm)
-        );
-      } else {
-        deliveryFee = config.baseDeliveryFee;
-      }
+      deliveryFee = Math.max(
+        config.baseDeliveryFee,
+        Math.round(config.baseDeliveryFee + serviceDistanceKm * config.deliveryFeePerKm)
+      );
     }
 
     const totalAmount = itemsSubtotal + deliveryFee;
@@ -323,30 +320,10 @@ class DeliveryService {
     });
 
     if (input.success) {
-      notifyAdminNewDeliveryOrder({
-        orderNumber: updated.orderNumber,
-        customerName: updated.user?.name ?? 'Guest',
-        customerPhone: updated.customerPhone,
-        itemSummary: `${(updated.items as any[]).length} items`,
-        totalAmount: updated.totalAmount,
-        address: updated.deliveryAddress
-      });
-
-      try {
-        const devices = await prisma.kitchenDevice.findMany({ select: { pushToken: true } });
-        const tokens = devices.map(d => d.pushToken);
-        if (tokens.length > 0) {
-          await sendPushNotifications(
-            tokens,
-            "URGENT: New Order!",
-            `Order ${updated.orderNumber} is waiting to be prepared!`,
-            { orderId: updated.id },
-            'high-priority-orders'
-          );
-        }
-      } catch (e) {
-        console.error("Failed to send instant kitchen alert", e);
-      }
+      await this.announcePaidOrder(updated);
+    } else {
+      // Payment failed/cancelled: return the items we reserved at checkout.
+      await this.restoreOrderStock(updated.id);
     }
 
     return {
@@ -355,6 +332,95 @@ class DeliveryService {
         : "Payment failed, order not accepted.",
       order: this.serializeOrder(updated, "user")
     };
+  }
+
+  // Notify the kitchen + admin that a paid order is waiting to be prepared.
+  private async announcePaidOrder(order: DeliveryOrder & { user?: { name?: string | null } | null }) {
+    notifyAdminNewDeliveryOrder({
+      orderNumber: order.orderNumber,
+      customerName: order.user?.name ?? 'Guest',
+      customerPhone: order.customerPhone,
+      itemSummary: `${(order.items as any[]).length} items`,
+      totalAmount: order.totalAmount,
+      address: order.deliveryAddress
+    });
+
+    try {
+      const devices = await prisma.kitchenDevice.findMany({ select: { pushToken: true } });
+      const tokens = devices.map((d) => d.pushToken);
+      if (tokens.length > 0) {
+        await sendPushNotifications(
+          tokens,
+          "URGENT: New Order!",
+          `Order ${order.orderNumber} is waiting to be prepared!`,
+          { orderId: order.id },
+          'high-priority-orders'
+        );
+      }
+    } catch (e) {
+      console.error("Failed to send instant kitchen alert", e);
+    }
+  }
+
+  // Idempotently return reserved stock to inventory for a failed/cancelled order.
+  // The `stockRestored` flag guarantees we never double-credit, even if this runs
+  // twice (e.g. failure path + later cancellation).
+  private async restoreOrderStock(orderId: string) {
+    await prisma.$transaction(async (tx) => {
+      const order = await tx.deliveryOrder.findUnique({ where: { id: orderId } });
+      if (!order || order.stockRestored) {
+        return;
+      }
+      const items = Array.isArray(order.items)
+        ? (order.items as Array<{ itemId?: string; quantity?: number }>)
+        : [];
+      for (const line of items) {
+        if (!line?.itemId || !line.quantity) {
+          continue;
+        }
+        await tx.deliveryItem.updateMany({
+          where: { id: line.itemId },
+          data: {
+            availableQuantity: { increment: line.quantity },
+            isAvailable: true
+          }
+        });
+      }
+      await tx.deliveryOrder.update({
+        where: { id: orderId },
+        data: { stockRestored: true }
+      });
+    });
+  }
+
+  // Webhook-driven confirmation: Razorpay tells us a payment was captured even if
+  // the customer's app never reached the confirm call (network drop, app killed).
+  // The caller has already verified the webhook signature, so this is trusted.
+  async confirmPaidViaRazorpayOrder(razorpayOrderId: string, razorpayPaymentId: string) {
+    const order = await prisma.deliveryOrder.findFirst({ where: { paymentReference: razorpayOrderId } });
+    if (!order) {
+      // Not a delivery order (could be a booking) — let the caller try elsewhere.
+      return null;
+    }
+
+    // Atomic guard: only the first confirmation flips the status + notifies.
+    const result = await prisma.deliveryOrder.updateMany({
+      where: { id: order.id, paymentStatus: { not: PaymentStatus.SUCCESS } },
+      data: { paymentStatus: PaymentStatus.SUCCESS, paymentReference: razorpayPaymentId }
+    });
+
+    if (result.count === 0) {
+      return order; // already confirmed elsewhere — idempotent no-op
+    }
+
+    const updated = await prisma.deliveryOrder.findUnique({
+      where: { id: order.id },
+      include: deliveryOrderInclude
+    });
+    if (updated) {
+      await this.announcePaidOrder(updated);
+    }
+    return updated ?? order;
   }
 
   async getMyOrders(userId: string) {
@@ -403,6 +469,11 @@ class DeliveryService {
         "New Delivery Order Available",
         `Order ${order.orderNumber} is ready for pickup!`
       );
+    }
+
+    if (status === DeliveryOrderStatus.CANCELLED) {
+      // Cancelling an order returns its reserved items to the kitchen's stock.
+      await this.restoreOrderStock(order.id);
     }
 
     return { message: "Delivery order status updated", order: this.serializeOrder(order, role === "ADMIN" ? "admin" : "kitchen") };
@@ -1104,11 +1175,29 @@ async unregisterKitchenPushToken(token: string) {
           baseDeliveryFee: 30,
           deliveryFeePerKm: 15,
           freeDeliveryThreshold: 500,
-          defaultRiderCut: 30
+          defaultRiderCut: 30,
+          kitchenLat: 29.4727,
+          kitchenLng: 79.6479,
+          serviceRadiusKm: 8
         }
       });
     }
     return config;
+  }
+
+  // Kitchen sets its own pickup location + serviceable radius from the dashboard.
+  async updateKitchenLocation(input: UpdateKitchenLocationInput) {
+    await this.getDeliveryConfig();
+    const config = await prisma.deliveryConfig.update({
+      where: { id: "default" },
+      data: {
+        kitchenLat: input.kitchenLat,
+        kitchenLng: input.kitchenLng,
+        serviceRadiusKm: input.serviceRadiusKm,
+        ...(input.kitchenAddress !== undefined ? { kitchenAddress: input.kitchenAddress } : {})
+      }
+    });
+    return { message: "Kitchen delivery location updated", config };
   }
 
   calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {

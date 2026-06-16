@@ -159,7 +159,21 @@ export const updateDeliveryConfigSchema = z.object({
   baseDeliveryFee: z.coerce.number().int().min(0),
   deliveryFeePerKm: z.coerce.number().int().min(0),
   freeDeliveryThreshold: z.coerce.number().int().min(0),
-  defaultRiderCut: z.coerce.number().int().min(0)
+  defaultRiderCut: z.coerce.number().int().min(0),
+  kitchenLat: z.coerce.number().min(-90).max(90).optional(),
+  kitchenLng: z.coerce.number().min(-180).max(180).optional(),
+  serviceRadiusKm: z.coerce.number().positive().max(100).optional(),
+  kitchenAddress: z.string().trim().max(500).optional()
 });
 
 export type UpdateDeliveryConfigInput = z.infer<typeof updateDeliveryConfigSchema>;
+
+// Kitchen sets its own pickup location + serviceable radius from its dashboard.
+export const updateKitchenLocationSchema = z.object({
+  kitchenLat: z.coerce.number().min(-90).max(90),
+  kitchenLng: z.coerce.number().min(-180).max(180),
+  serviceRadiusKm: z.coerce.number().positive().max(100),
+  kitchenAddress: z.string().trim().max(500).optional()
+});
+
+export type UpdateKitchenLocationInput = z.infer<typeof updateKitchenLocationSchema>;
