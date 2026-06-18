@@ -431,6 +431,15 @@ class CatalogService {
     };
   }
 
+  // Room ids the user has already reviewed — used to hide review prompts.
+  async getMyReviewedRoomIds(userId: string) {
+    const reviews = await prisma.roomReview.findMany({
+      where: { userId },
+      select: { roomId: true }
+    });
+    return { roomIds: reviews.map((r) => r.roomId) };
+  }
+
   async getReviewEligibility(userId: string, roomId: string) {
     const room = await prisma.room.findUnique({
       where: { id: roomId },

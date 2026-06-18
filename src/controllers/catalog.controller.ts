@@ -142,6 +142,22 @@ export const getRoomReviewEligibilityController = async (
   }
 };
 
+export const getMyReviewedRoomsController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+    const response = await catalogService.getMyReviewedRoomIds(req.user.userId);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const upsertRoomReviewController = async (
   req: Request,
   res: Response,

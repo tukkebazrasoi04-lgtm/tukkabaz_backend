@@ -7,6 +7,7 @@ import {
   getRoomReviewsController,
   getRoomsController,
   getServicesController,
+  getMyReviewedRoomsController,
   upsertRoomReviewController
 } from "../controllers/catalog.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
@@ -17,6 +18,7 @@ router.get("/rooms", getRoomsController);
 router.get("/rooms/:id", getRoomByIdController);
 router.get("/rooms/:id/availability", getRoomAvailabilityController);
 router.get("/services/:id/availability", getServiceAvailabilityController);
+router.get("/reviews/mine", authMiddleware, getMyReviewedRoomsController);
 router.get("/rooms/:id/reviews", getRoomReviewsController);
 router.get("/rooms/:id/review-eligibility", authMiddleware, getRoomReviewEligibilityController);
 router.post("/rooms/:id/reviews", authMiddleware, upsertRoomReviewController);
