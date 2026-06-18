@@ -32,6 +32,8 @@ const userSelect = {
   phone: true,
   phoneVerifiedAt: true,
   deliveryAddress: true,
+  deliveryLat: true,
+  deliveryLng: true,
   role: true,
   createdAt: true,
   updatedAt: true,
@@ -404,6 +406,21 @@ class AuthService {
     ]);
 
     return { message: "Password updated. Please sign in with your new password." };
+  }
+
+  // Save the user's preferred delivery location (address text + coordinates) so it
+  // can be reused at checkout without re-pinning the map.
+  async saveDeliveryAddress(userId: string, input: { address: string; lat: number; lng: number }) {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        deliveryAddress: input.address.trim(),
+        deliveryLat: input.lat,
+        deliveryLng: input.lng
+      },
+      select: userSelect
+    });
+    return { message: "Delivery address saved", user };
   }
 
   // Permanent account deletion (Google Play requirement for apps with login).

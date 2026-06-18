@@ -12,6 +12,7 @@ import {
   phoneVerificationVerifySchema,
   registerSchema,
   refreshTokenSchema,
+  saveDeliveryAddressSchema,
   userOtpRequestSchema,
   userOtpVerifySchema
 } from "../validators/auth.validator";
@@ -277,6 +278,28 @@ export const savePhoneController = async (
     }
 
     const response = await authService.savePhone(req.user.userId, parsed.data.phone);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const saveDeliveryAddressController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+
+    const parsed = saveDeliveryAddressSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, "Invalid delivery address body", parsed.error.flatten());
+    }
+
+    const response = await authService.saveDeliveryAddress(req.user.userId, parsed.data);
     sendSuccess(res, response);
   } catch (error) {
     next(error);

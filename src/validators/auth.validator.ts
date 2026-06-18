@@ -62,6 +62,12 @@ export const phoneVerificationVerifySchema = z.object({
   otp: z.string().min(4).max(8)
 });
 
+export const saveDeliveryAddressSchema = z.object({
+  address: z.string().trim().min(3).max(500),
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180)
+});
+
 export const adminLoginSchema = z.object({
   email: z.string().email("Valid email is required"),
   password: z.string().min(6, "Password must be at least 6 characters")

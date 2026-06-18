@@ -14,6 +14,7 @@ import {
   refreshTokenController,
   resetPasswordController,
   savePhoneController,
+  saveDeliveryAddressController,
   verifyPhoneVerificationController,
   verifyUserOtpController
 } from "../controllers/auth.controller";
@@ -33,6 +34,7 @@ router.post("/otp/verify", verifyUserOtpController);
 router.post("/phone/request", authMiddleware, requestPhoneVerificationController);
 router.post("/phone/verify", authMiddleware, verifyPhoneVerificationController);
 router.post("/phone/save", authMiddleware, savePhoneController);
+router.post("/delivery-address", authMiddleware, saveDeliveryAddressController);
 router.post("/refresh", refreshTokenController);
 router.get("/me", authMiddleware, getMeController);
 router.post("/logout", authMiddleware, logoutController);
