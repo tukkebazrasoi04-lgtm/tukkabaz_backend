@@ -48,6 +48,17 @@ export const razorpayWebhookController = async (req: Request, res: Response, nex
     const razorpayOrderId = paymentEntity?.order_id ?? body.payload?.order?.entity?.id;
     const razorpayPaymentId = paymentEntity?.id;
 
+    // Payment failed/cancelled server-side → mark the order failed and release the
+    // reserved stock, even if the app never reported it (e.g. app was killed).
+    if (event === "payment.failed" && razorpayOrderId) {
+      const failedDelivery = await deliveryService.failViaRazorpayOrder(razorpayOrderId);
+      if (!failedDelivery) {
+        await bookingService.failViaRazorpayOrder(razorpayOrderId);
+      }
+      res.status(200).json({ received: true });
+      return;
+    }
+
     // Acknowledge non-payment events without doing anything.
     const isPaidEvent = event === "payment.captured" || event === "order.paid";
     if (!isPaidEvent || !razorpayOrderId || !razorpayPaymentId) {

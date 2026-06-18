@@ -370,6 +370,25 @@ class DeliveryService {
     }
   }
 
+  // Webhook-driven failure: Razorpay reports a failed/cancelled payment. Mark the
+  // order failed (only if not already paid) and release the reserved stock. The
+  // caller verified the webhook signature, so this is trusted.
+  async failViaRazorpayOrder(razorpayOrderId: string) {
+    const order = await prisma.deliveryOrder.findFirst({ where: { paymentReference: razorpayOrderId } });
+    if (!order) {
+      return null; // not a delivery order (could be a booking)
+    }
+    // Only fail orders that haven't been paid — never overturn a SUCCESS.
+    const result = await prisma.deliveryOrder.updateMany({
+      where: { id: order.id, paymentStatus: PaymentStatus.PENDING },
+      data: { paymentStatus: PaymentStatus.FAILED }
+    });
+    if (result.count > 0) {
+      await this.restoreOrderStock(order.id);
+    }
+    return order;
+  }
+
   // Idempotently return reserved stock to inventory for a failed/cancelled order.
   // The `stockRestored` flag guarantees we never double-credit, even if this runs
   // twice (e.g. failure path + later cancellation).

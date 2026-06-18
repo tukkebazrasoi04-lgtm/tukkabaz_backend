@@ -197,6 +197,21 @@ class BookingService {
     );
   }
 
+  // Webhook-driven failure: mark a booking failed (only if still pending) so a held
+  // booking doesn't linger after a failed/cancelled payment. Signature already
+  // verified by the webhook handler.
+  async failViaRazorpayOrder(razorpayOrderId: string) {
+    const booking = await prisma.booking.findFirst({ where: { paymentReference: razorpayOrderId } });
+    if (!booking) {
+      return null;
+    }
+    await prisma.booking.updateMany({
+      where: { id: booking.id, paymentStatus: PaymentStatus.PENDING },
+      data: { paymentStatus: PaymentStatus.FAILED }
+    });
+    return booking;
+  }
+
   async confirmBookingPayment(userId: string, input: ConfirmBookingPaymentInput, trusted = false) {
     const booking = await prisma.booking.findFirst({
       where: {
