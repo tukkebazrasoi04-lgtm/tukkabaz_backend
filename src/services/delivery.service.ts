@@ -118,13 +118,21 @@ class DeliveryService {
         data: {
           phone: customerPhone,
           phoneVerifiedAt: new Date(),
-          deliveryAddress: input.deliveryAddress.trim()
+          deliveryAddress: input.deliveryAddress.trim(),
+          deliveryLat: input.destinationLat,
+          deliveryLng: input.destinationLng
         }
       });
-    } else if (user.deliveryAddress !== input.deliveryAddress.trim()) {
+    } else {
+      // Always keep the saved delivery location in sync with the latest order so
+      // it prefills next time (address text + map coordinates).
       await prisma.user.update({
         where: { id: userId },
-        data: { deliveryAddress: input.deliveryAddress.trim() }
+        data: {
+          deliveryAddress: input.deliveryAddress.trim(),
+          deliveryLat: input.destinationLat,
+          deliveryLng: input.destinationLng
+        }
       });
     }
 
