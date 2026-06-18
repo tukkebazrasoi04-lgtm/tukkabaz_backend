@@ -406,6 +406,18 @@ class AuthService {
     return { message: "Password updated. Please sign in with your new password." };
   }
 
+  // Permanent account deletion (Google Play requirement for apps with login).
+  // Cascades remove the user's sessions, bookings, reviews and delivery orders;
+  // an optional linked delivery-partner row is unlinked (userId set null).
+  async deleteAccount(userId: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new AppError(404, "Account not found.");
+    }
+    await prisma.user.delete({ where: { id: userId } });
+    return { message: "Your account and associated data have been permanently deleted." };
+  }
+
   async requestUserOtp(input: { name?: string; phone: string }) {
     const phone = normalizePhone(input.phone);
     return otpService.requestOtp(phone, OtpPurpose.USER_PHONE_LOGIN, "user login");

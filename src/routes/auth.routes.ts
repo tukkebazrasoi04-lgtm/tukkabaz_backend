@@ -9,6 +9,7 @@ import {
   requestUserOtpController,
   requestEmailVerificationController,
   verifyEmailController,
+  deleteAccountController,
   registerController,
   refreshTokenController,
   resetPasswordController,
@@ -35,5 +36,6 @@ router.post("/phone/save", authMiddleware, savePhoneController);
 router.post("/refresh", refreshTokenController);
 router.get("/me", authMiddleware, getMeController);
 router.post("/logout", authMiddleware, logoutController);
+router.delete("/account", authMiddleware, deleteAccountController);
 
 export default router;

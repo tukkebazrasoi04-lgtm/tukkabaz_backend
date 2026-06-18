@@ -120,6 +120,23 @@ export const resetPasswordController = async (
   }
 };
 
+export const deleteAccountController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+
+    const response = await authService.deleteAccount(req.user.userId);
+    sendSuccess(res, response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const requestEmailVerificationController = async (
   req: Request,
   res: Response,
