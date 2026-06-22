@@ -23,9 +23,31 @@ const req = async (method, path, body, token) => {
   return json;
 };
 
-const createPaidOrder = async () => {
+const getToken = async () => {
+  if (process.env.EMAIL && process.env.PASSWORD) {
+    const login = await req('POST', '/auth/login', { email: process.env.EMAIL, password: process.env.PASSWORD });
+    if (!login.accessToken) throw new Error('Login did not return an access token. Response: ' + JSON.stringify(login));
+    return { email: process.env.EMAIL, token: login.accessToken };
+  }
+
   const email = `kitchen-test+${Date.now()}@tukkebaz.test`;
   const reg = await req('POST', '/auth/register', { name: 'Buzz Tester', email, password: 'Test@12345' });
+  if (reg.accessToken) return { email, token: reg.accessToken };
+
+  const otp = reg.otp || process.env.OTP;
+  if (!otp) {
+    throw new Error(
+      'No token path available. For PROD set EMAIL=<verified account> PASSWORD=<password>. ' +
+      'For a dev backend run with OTP_DEV_MODE=true, or pass OTP=<code>.'
+    );
+  }
+  const verified = await req('POST', '/auth/email/verify', { email, otp });
+  if (!verified.accessToken) throw new Error('Email verification did not return an access token.');
+  return { email, token: verified.accessToken };
+};
+
+const createPaidOrder = async () => {
+  const { email, token } = await getToken();
   console.log('✓ test customer:', email);
 
   const itemsRes = await (await fetch(BASE + '/delivery/items?category=FOOD')).json();
@@ -38,10 +60,10 @@ const createPaidOrder = async () => {
     customerPhone: '9' + String(Date.now()).slice(-9),
     destinationLat: 29.4727,
     destinationLng: 79.6479
-  }, reg.accessToken);
+  }, token);
   const order = orderRes.order;
 
-  await req('POST', '/delivery/orders/confirm', { orderId: order.id, success: true, paymentReference: 'TEST_' + Date.now() }, reg.accessToken);
+  await req('POST', '/delivery/orders/confirm', { orderId: order.id, success: true, paymentReference: 'TEST_' + Date.now() }, token);
   console.log('✓ order created + paid:', order.orderNumber, `(id: ${order.id})`);
   return order;
 };

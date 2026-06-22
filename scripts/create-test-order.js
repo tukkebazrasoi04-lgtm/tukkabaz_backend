@@ -19,12 +19,40 @@ const post = async (path, body, token) => {
   return json;
 };
 
-(async () => {
-  // 1) Throwaway user -> access token
+// Obtain an access token.
+//  - Against PROD: set EMAIL + PASSWORD env vars for an existing verified
+//    account; the script logs in (no OTP needed).
+//  - Against a dev backend (OTP_DEV_MODE=true): falls back to register +
+//    email-verify using the OTP the backend returns.
+const getToken = async () => {
+  if (process.env.EMAIL && process.env.PASSWORD) {
+    const login = await post('/auth/login', { email: process.env.EMAIL, password: process.env.PASSWORD });
+    if (!login.accessToken) {
+      throw new Error('Login did not return an access token (is the account verified?). Response: ' + JSON.stringify(login));
+    }
+    return { email: process.env.EMAIL, token: login.accessToken };
+  }
+
   const email = `kitchen-test+${Date.now()}@tukkebaz.test`;
   const reg = await post('/auth/register', { name: 'Kitchen Tester', email, password: 'Test@12345' });
-  const token = reg.accessToken;
-  console.log('✓ registered test user:', email);
+  if (reg.accessToken) return { email, token: reg.accessToken };
+
+  const otp = reg.otp || process.env.OTP;
+  if (!otp) {
+    throw new Error(
+      'No token path available. For PROD, set EMAIL=<verified account> PASSWORD=<password>. ' +
+      'For a dev backend, run with OTP_DEV_MODE=true (the OTP is returned), or pass OTP=<code>.'
+    );
+  }
+  const verified = await post('/auth/email/verify', { email, otp });
+  if (!verified.accessToken) throw new Error('Email verification did not return an access token.');
+  return { email, token: verified.accessToken };
+};
+
+(async () => {
+  // 1) Get an access token (login with EMAIL/PASSWORD, or dev register+verify)
+  const { email, token } = await getToken();
+  console.log('✓ authenticated as:', email);
 
   // 2) Pick a FOOD item
   const itemsRes = await (await fetch(BASE + '/delivery/items?category=FOOD')).json();

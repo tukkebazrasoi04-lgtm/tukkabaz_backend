@@ -55,10 +55,12 @@ class DeliveryService {
   }
 
   async getItems(category?: DeliveryCategory) {
+    // Return items the kitchen hasn't hidden (isAvailable), INCLUDING ones that are
+    // currently out of stock (availableQuantity 0). The app shows those as a greyed
+    // "Sold out" card rather than dropping them, so the menu stays consistent.
     return prisma.deliveryItem.findMany({
       where: {
         isAvailable: true,
-        availableQuantity: { gt: 0 },
         ...(category ? { category } : {})
       },
       orderBy: { createdAt: "desc" }
@@ -362,7 +364,8 @@ class DeliveryService {
           "URGENT: New Order!",
           `Order ${order.orderNumber} is waiting to be prepared!`,
           { orderId: order.id },
-          'high-priority-orders'
+          'urgent-orders-v2',
+          'order-alert.wav'
         );
       }
     } catch (e) {
@@ -734,7 +737,8 @@ async unregisterKitchenPushToken(token: string) {
         "Order Assigned",
         `Order ${res.order.orderNumber} has been assigned to you!`,
         { orderId },
-        'high-priority-orders'
+        'urgent-orders-v2',
+        'order-alert.wav'
       ).catch((e) => console.error("Failed to send assignment push notification", e));
     }
     return res;
@@ -802,7 +806,8 @@ async unregisterKitchenPushToken(token: string) {
         "Order Assigned",
         `Order ${order.orderNumber} has been assigned to you by the kitchen!`,
         { orderId },
-        "high-priority-orders"
+        'urgent-orders-v2',
+        'order-alert.wav'
       ).catch((e) => console.error("Failed to send assignment push notification", e));
     }
 
