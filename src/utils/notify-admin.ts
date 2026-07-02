@@ -99,7 +99,7 @@ export async function notifyAvailableRiders(title: string, body: string): Promis
     }
 
     // Pass the extracted tokens to your shared Expo Push utility
-    await sendPushNotifications(tokens, title, body, undefined, 'urgent-orders-v2', 'order-alert.wav');
+    await sendPushNotifications(tokens, title, body, undefined, 'urgent-orders-v3', 'order-alert.wav');
     logger.info(`[notifyRiders] Broadcasted push to ${tokens.length} rider(s)`);
   } catch (error) {
     logger.warn(`[notifyRiders] Broadcast failed: ${error instanceof Error ? error.message : String(error)}`);

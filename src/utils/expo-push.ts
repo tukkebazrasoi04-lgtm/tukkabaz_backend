@@ -17,7 +17,7 @@ export const sendPushNotifications = async (
 
   // Order alarms break through Focus modes on iOS via the time-sensitive
   // interruption level (requires the time-sensitive entitlement in the build).
-  const isUrgent = channelId === 'urgent-orders-v2';
+  const isUrgent = channelId === 'urgent-orders-v3';
 
   for (let pushToken of tokens) {
     if (!Expo.isExpoPushToken(pushToken)) {
