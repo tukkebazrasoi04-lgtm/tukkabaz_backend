@@ -189,9 +189,19 @@ class DeliveryService {
     // so the create below is retried with a fresh number on the rare unique-key
     // collision. A failed attempt rolls back its whole transaction (including the
     // stock decrement), so retrying stays atomic and never double-decrements.
+    // Derive from the HIGHEST existing number for the year, not count(). count()
+    // breaks the moment any order is deleted (gaps make count() < max → the next
+    // number collides with an existing one → P2002 on insert). Zero-padded to 6
+    // digits so lexical desc ordering equals numeric ordering.
     const buildOrderNumber = async () => {
-      const orderCount = await prisma.deliveryOrder.count();
-      return `ORD-${new Date().getFullYear()}-${String(orderCount + 1).padStart(6, "0")}`;
+      const prefix = `ORD-${new Date().getFullYear()}-`;
+      const last = await prisma.deliveryOrder.findFirst({
+        where: { orderNumber: { startsWith: prefix } },
+        orderBy: { orderNumber: "desc" },
+        select: { orderNumber: true }
+      });
+      const lastSeq = last ? (parseInt(last.orderNumber.slice(prefix.length), 10) || 0) : 0;
+      return `${prefix}${String(lastSeq + 1).padStart(6, "0")}`;
     };
     let orderNumber = await buildOrderNumber();
 
