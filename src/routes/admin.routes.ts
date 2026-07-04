@@ -20,7 +20,7 @@ import {
   adminClearRoomAvailabilityController,
   adminGetServiceAvailabilityController,
   adminSetServiceAvailabilityController,
-  adminClearServiceAvailabilityController
+  adminClearServiceAvailabilityController,
 } from "../controllers/admin.controller";
 import { authMiddleware, requireRoles } from "../middleware/auth.middleware";
 import { adminDeleteImageController, adminUploadMediaController } from "../controllers/media.controller";

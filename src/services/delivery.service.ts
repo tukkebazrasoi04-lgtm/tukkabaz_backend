@@ -185,8 +185,15 @@ class DeliveryService {
     const totalAmount = itemsSubtotal + deliveryFee;
     const partnerCut = config.defaultRiderCut;
 
-    const orderCount = await prisma.deliveryOrder.count();
-    const orderNumber = `ORD-${new Date().getFullYear()}-${String(orderCount + 1).padStart(6, "0")}`;
+    // Sequential order number. count()+1 is NOT atomic across concurrent orders,
+    // so the create below is retried with a fresh number on the rare unique-key
+    // collision. A failed attempt rolls back its whole transaction (including the
+    // stock decrement), so retrying stays atomic and never double-decrements.
+    const buildOrderNumber = async () => {
+      const orderCount = await prisma.deliveryOrder.count();
+      return `ORD-${new Date().getFullYear()}-${String(orderCount + 1).padStart(6, "0")}`;
+    };
+    let orderNumber = await buildOrderNumber();
 
     let paymentReference = input.paymentReference?.trim() || null;
     let paymentStatus = input.paymentStatus ?? (input.paymentReference ? PaymentStatus.SUCCESS : PaymentStatus.PENDING);
@@ -206,7 +213,7 @@ class DeliveryService {
       }
     }
 
-    const order = await prisma.$transaction(async (tx) => {
+    const createOrderTxn = () => prisma.$transaction(async (tx) => {
       for (const inputItem of input.items) {
         const updated = await tx.deliveryItem.updateMany({
           where: {
@@ -251,6 +258,26 @@ class DeliveryService {
         include: deliveryOrderInclude
       });
     });
+
+    const order = await (async () => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await createOrderTxn();
+        } catch (error) {
+          // Prisma unique-constraint violation on orderNumber → P2002 with the
+          // field in meta.target. Duck-typed so we don't need a value import.
+          const err = error as { code?: string; meta?: { target?: unknown } };
+          const isDuplicateOrderNumber =
+            err?.code === "P2002" &&
+            String(err?.meta?.target ?? "").includes("orderNumber");
+          if (isDuplicateOrderNumber && attempt < 4) {
+            orderNumber = await buildOrderNumber();
+            continue;
+          }
+          throw error;
+        }
+      }
+    })();
 
     if (order.paymentStatus === PaymentStatus.SUCCESS) {
       notifyAdminNewDeliveryOrder({
@@ -451,6 +478,36 @@ class DeliveryService {
       await this.announcePaidOrder(updated);
     }
     return updated ?? order;
+  }
+
+  // Cancel delivery orders that were created but never paid for within the window,
+  // and return their reserved stock to inventory. Without this, an abandoned
+  // checkout holds items "sold out" forever. Only touches orders still awaiting
+  // payment AND not yet accepted; the paymentStatus guard on the update prevents
+  // racing a payment that just succeeded, and restoreOrderStock is idempotent.
+  async cancelStalePendingOrders(olderThanMinutes = 20) {
+    const cutoff = new Date(Date.now() - olderThanMinutes * 60_000);
+    const stale = await prisma.deliveryOrder.findMany({
+      where: {
+        paymentStatus: PaymentStatus.PENDING,
+        status: DeliveryOrderStatus.PENDING,
+        createdAt: { lt: cutoff }
+      },
+      select: { id: true }
+    });
+
+    let cancelled = 0;
+    for (const { id } of stale) {
+      const result = await prisma.deliveryOrder.updateMany({
+        where: { id, paymentStatus: PaymentStatus.PENDING, status: DeliveryOrderStatus.PENDING },
+        data: { status: DeliveryOrderStatus.CANCELLED, paymentStatus: PaymentStatus.FAILED }
+      });
+      if (result.count > 0) {
+        await this.restoreOrderStock(id);
+        cancelled += 1;
+      }
+    }
+    return cancelled;
   }
 
   async getMyOrders(userId: string) {

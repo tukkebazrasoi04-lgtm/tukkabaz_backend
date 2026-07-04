@@ -33,12 +33,22 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 import { startKitchenAlertLoop } from "./utils/kitchen-alerts";
+import { deliveryService } from "./services/delivery.service";
 
 const start = async (): Promise<void> => {
   try {
     await bootstrap();
 
     startKitchenAlertLoop();
+
+    // Reclaim stock from abandoned (unpaid) delivery orders every 5 minutes so
+    // items don't stay "sold out" forever after a customer bails on checkout.
+    setInterval(() => {
+      void deliveryService
+        .cancelStalePendingOrders(20)
+        .then((n) => { if (n > 0) logger.info("stale-pending-cleanup", { cancelled: n }); })
+        .catch((error) => logger.error("stale-pending-cleanup:failed", { error: error instanceof Error ? error.message : String(error) }));
+    }, 5 * 60 * 1000);
 
     server = app.listen(env.PORT, "0.0.0.0", () => {
       logger.info("server:started", {
