@@ -402,7 +402,7 @@ class DeliveryService {
           `Order ${order.orderNumber} is waiting to be prepared!`,
           { orderId: order.id },
           'urgent-orders-v3',
-          'order-alert.wav'
+          'order_alert.wav'
         );
       }
     } catch (e) {
@@ -805,7 +805,7 @@ async unregisterKitchenPushToken(token: string) {
         `Order ${res.order.orderNumber} has been assigned to you!`,
         { orderId },
         'urgent-orders-v3',
-        'order-alert.wav'
+        'order_alert.wav'
       ).catch((e) => console.error("Failed to send assignment push notification", e));
     }
     return res;
@@ -874,7 +874,7 @@ async unregisterKitchenPushToken(token: string) {
         `Order ${order.orderNumber} has been assigned to you by the kitchen!`,
         { orderId },
         'urgent-orders-v3',
-        'order-alert.wav'
+        'order_alert.wav'
       ).catch((e) => console.error("Failed to send assignment push notification", e));
     }
 

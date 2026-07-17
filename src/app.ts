@@ -7,6 +7,7 @@ import deliveryRoutes from "./routes/delivery.routes";
 import webhookRoutes from "./routes/webhook.routes";
 import { errorMiddleware, notFoundMiddleware } from "./middleware/error.middleware";
 import { requestLoggerMiddleware } from "./middleware/request-logger.middleware";
+import { env } from "./config/env";
 
 const app = express();
 
@@ -43,6 +44,15 @@ app.use((req, res, next) => {
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ message: "OK" });
+});
+
+// Public app config — only exposes values safe to show to any client.
+// Add SUPPORT_PHONE=+91XXXXXXXXXX to backend .env to populate this.
+app.get("/config", (_req, res) => {
+  res.json({ supportPhone: env.SUPPORT_PHONE ?? null });
+});
+app.get("/api/config", (_req, res) => {
+  res.json({ supportPhone: env.SUPPORT_PHONE ?? null });
 });
 
 app.use("/auth", authRoutes);

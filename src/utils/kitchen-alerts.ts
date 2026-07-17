@@ -76,7 +76,7 @@ export const startKitchenAlertLoop = () => {
           orderCount: newPendingOrders.length
         },
         'urgent-orders-v3',
-        'order-alert.wav'
+        'order_alert.wav'
       ).catch((e) =>
         logger.error("Failed to send kitchen alert", e)
       );

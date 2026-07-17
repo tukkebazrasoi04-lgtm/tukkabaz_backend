@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   console.log('Starting DeliveryPartner cleanup...');
-  
+
   const allPartners = await prisma.deliveryPartner.findMany({
     orderBy: { createdAt: 'desc' }
   });
@@ -13,10 +13,10 @@ async function main() {
   const toDelete: string[] = [];
 
   for (const partner of allPartners) {
-    if (seenPhones.has(partner.phone)) {
+    if (seenPhones.has(partner.phone as any)) {
       toDelete.push(partner.id);
     } else {
-      seenPhones.add(partner.phone);
+      seenPhones.add(partner.phone as any);
     }
   }
 

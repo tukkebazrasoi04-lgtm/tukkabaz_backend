@@ -52,7 +52,9 @@ const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
   // Secret configured in the Razorpay dashboard for the webhook endpoint. Used to
   // verify that incoming webhook calls genuinely came from Razorpay.
-  RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional()
+  RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
+  // Support phone number shown in the app (e.g. +919876543210)
+  SUPPORT_PHONE: z.string().min(7).optional()
 }).superRefine((data, ctx) => {
   // In production, real payments must be verifiable: keys cannot be missing
   // (otherwise the server would silently accept unverified "simulated" payments).
