@@ -9,6 +9,15 @@ import { notifyAdminPartnerApplication, notifyAdminNewDeliveryOrder, notifyAvail
 import { sendPushNotifications } from "../utils/expo-push";
 import { createRazorpayOrder } from "../utils/razorpay";
 
+async function generatePaymentReference(amount: number, receiptId: string): Promise<string> {
+  const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = env;
+  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+    throw new AppError(500, "Razorpay keys are not configured. Cannot create payment order.");
+  }
+  const order = await createRazorpayOrder(amount, receiptId);
+  return order.id;
+}
+
 
 const partnerAvailableStatuses = new Set<DeliveryOrderStatus>([
   DeliveryOrderStatus.DELIVERED,
@@ -207,20 +216,12 @@ class DeliveryService {
 
     let paymentReference = input.paymentReference?.trim() || null;
     let paymentStatus = input.paymentStatus ?? (input.paymentReference ? PaymentStatus.SUCCESS : PaymentStatus.PENDING);
+    let razorpayOrderId: string | null = null;
 
-    if (input.paymentProvider === "RAZORPAY" && !input.paymentReference) {
-      const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = env;
-      if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
-        // Production/live: require a real Razorpay order so the payment signature
-        // can be verified on confirmation. Do not fall back to an unverified
-        // simulated reference on failure.
-        const rzOrder = await createRazorpayOrder(totalAmount, orderNumber);
-        paymentReference = rzOrder.id;
-        paymentStatus = PaymentStatus.PENDING;
-      } else {
-        // No keys configured (local/dev only): simulated reference, no verification.
-        paymentReference = `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-      }
+    if (input.paymentProvider === "RAZORPAY") {
+      razorpayOrderId = await generatePaymentReference(totalAmount, orderNumber);
+      paymentReference = razorpayOrderId;
+      paymentStatus = PaymentStatus.PENDING;
     }
 
     const createOrderTxn = () => prisma.$transaction(async (tx) => {
@@ -251,6 +252,7 @@ class DeliveryService {
         partnerCut,
         paymentProvider: input.paymentProvider?.trim() || "SIMULATED",
         paymentReference,
+        razorpayOrderId,
         paymentStatus,
         status: DeliveryOrderStatus.PENDING,
         deliveryAddress: input.deliveryAddress.trim(),
@@ -332,7 +334,7 @@ class DeliveryService {
       };
     }
 
-    if (input.success && order.paymentReference?.startsWith("order_")) {
+    if (input.success) {
       const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = input;
       if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
         throw new AppError(400, "Missing Razorpay verification credentials.");
@@ -343,7 +345,7 @@ class DeliveryService {
         throw new AppError(500, "Razorpay secret key is not configured on the server.");
       }
 
-      if (order.paymentReference !== razorpayOrderId) {
+      if (order.razorpayOrderId !== razorpayOrderId) {
         throw new AppError(400, "Order ID mismatch.");
       }
 
@@ -357,11 +359,14 @@ class DeliveryService {
       }
     }
 
+    const finalRazorpayPaymentId = input.razorpayPaymentId ?? input.paymentReference ?? order.paymentReference ?? "";
+
     const updated = await prisma.deliveryOrder.update({
       where: { id: order.id },
       data: {
         paymentStatus: input.success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED,
-        paymentReference: input.razorpayPaymentId ?? input.paymentReference ?? order.paymentReference
+        razorpayPaymentId: finalRazorpayPaymentId,
+        paymentReference: finalRazorpayPaymentId
       },
       include: deliveryOrderInclude
     });
@@ -414,7 +419,7 @@ class DeliveryService {
   // order failed (only if not already paid) and release the reserved stock. The
   // caller verified the webhook signature, so this is trusted.
   async failViaRazorpayOrder(razorpayOrderId: string) {
-    const order = await prisma.deliveryOrder.findFirst({ where: { paymentReference: razorpayOrderId } });
+    const order = await prisma.deliveryOrder.findFirst({ where: { razorpayOrderId: razorpayOrderId } });
     if (!order) {
       return null; // not a delivery order (could be a booking)
     }
@@ -464,7 +469,7 @@ class DeliveryService {
   // the customer's app never reached the confirm call (network drop, app killed).
   // The caller has already verified the webhook signature, so this is trusted.
   async confirmPaidViaRazorpayOrder(razorpayOrderId: string, razorpayPaymentId: string) {
-    const order = await prisma.deliveryOrder.findFirst({ where: { paymentReference: razorpayOrderId } });
+    const order = await prisma.deliveryOrder.findFirst({ where: { razorpayOrderId: razorpayOrderId } });
     if (!order) {
       // Not a delivery order (could be a booking) — let the caller try elsewhere.
       return null;
@@ -473,7 +478,7 @@ class DeliveryService {
     // Atomic guard: only the first confirmation flips the status + notifies.
     const result = await prisma.deliveryOrder.updateMany({
       where: { id: order.id, paymentStatus: { not: PaymentStatus.SUCCESS } },
-      data: { paymentStatus: PaymentStatus.SUCCESS, paymentReference: razorpayPaymentId }
+      data: { paymentStatus: PaymentStatus.SUCCESS, razorpayPaymentId: razorpayPaymentId, paymentReference: razorpayPaymentId }
     });
 
     if (result.count === 0) {

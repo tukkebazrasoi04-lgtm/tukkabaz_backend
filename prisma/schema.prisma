@@ -149,9 +149,11 @@ model Booking {
   kind             BookingKind
   quantity         Int           @default(1)
   amount           Int
-  paymentProvider  String        @default("SIMULATED")
-  paymentReference String?
-  paymentStatus    PaymentStatus @default(PENDING)
+  paymentProvider   String        @default("SIMULATED")
+  paymentReference  String?
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  paymentStatus     PaymentStatus @default(PENDING)
   bookedFor        DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -221,10 +223,12 @@ model DeliveryOrder {
   assignedAt       DateTime?
   pickupOtp        String?
   deliveryOtp      String?
-  orderNumber      String              @unique
-  paymentProvider  String              @default("SIMULATED")
-  paymentReference String?
-  paymentStatus    PaymentStatus       @default(PENDING)
+  orderNumber       String              @unique
+  paymentProvider   String              @default("SIMULATED")
+  paymentReference  String?
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  paymentStatus     PaymentStatus       @default(PENDING)
   isPayoutCleared  Boolean             @default(false)
   partnerCut       Int                 @default(50)
   payoutReference  String?
