@@ -292,14 +292,10 @@ class DeliveryService {
     })();
 
     if (order.paymentStatus === PaymentStatus.SUCCESS) {
-      notifyAdminNewDeliveryOrder({
-        orderNumber: order.orderNumber,
-        customerName: user.name ?? 'Guest',
-        customerPhone: user.phone ?? customerPhone,
-        itemSummary: `${input.items.length} items`,
-        totalAmount: totalAmount,
-        address: input.deliveryAddress
-      });
+      // Reuse the same method that confirmDeliveryPayment and the Razorpay
+      // webhook use. It sends both the admin notification AND the kitchen push
+      // in one call, so we no longer need the background polling loop.
+      void this.announcePaidOrder(order);
     }
 
     return { message: "Delivery order placed", order: this.serializeOrder(order, "user") };
